@@ -13,7 +13,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 
 ## Chapters
 
-1. Foundations: AI, Python, and the hardware landscape  
+1. [Foundations: AI, Python, and the hardware landscape](chapters/chapter-1.md)  
 2. Setting up reproducible environments (venv, conda, containers)  
 3. Profiling and benchmarking: measuring performance and bottlenecks  
 4. CPU optimizations and multi-threading (vectorization, OpenMP, asyncio)  
