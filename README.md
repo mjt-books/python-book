@@ -16,7 +16,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 1. [Foundations: AI, Python, and the hardware landscape](chapters/chapter-1.md)  
 2. [Setting up reproducible environments (venv, conda, containers)](chapters/chapter-2.md)  
 3. [Profiling and benchmarking: measuring performance and bottlenecks](chapters/chapter-3.md)  
-4. CPU optimizations and multi-threading (vectorization, OpenMP, asyncio)  
+4. [CPU optimizations and multi-threading (vectorization, OpenMP, asyncio)](chapters/chapter-4.md)  
 5. GPU fundamentals and CUDA basics for Python users  
 6. Using cuDNN, cuBLAS, and vendor libraries effectively  
 7. Mixed precision, quantization, and numerical trade-offs  
