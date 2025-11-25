@@ -11,6 +11,7 @@ Learning objectives:
 Sections:
 - Overview: why hardware matters for AI
 - Python ecosystem: key libraries and runtimes
+- Using GPUs from Python: PyTorch, CuPy, and friends
 - Hardware primer: CPUs, GPUs, TPUs, and edge devices
 - Performance trade-offs and cost considerations
 - Quick setup: verifying device availability and drivers
@@ -41,6 +42,77 @@ On the deployment side, formats and runtimes like **ONNX**, **TensorRT**, and **
 Finally, distributed compute frameworks such as **Ray**, **Dask**, and libraries built on top of them help you scale beyond a single machine. They coordinate multiple processes, nodes, and devices so that large training runs, hyperparameter searches, or data preprocessing pipelines can make full use of available resources.
 
 In the rest of this book, we’ll treat Python as the “control plane” that talks to these libraries and runtimes. You don’t need to memorize every API, but you should recognize the roles they play: numerical building blocks, training frameworks, inference runtimes, and distributed schedulers. We’ll focus on how to combine them to turn a single-machine script into a scalable, hardware-aware system.
+
+## Using GPUs from Python: PyTorch, CuPy, and friends
+
+From a Python user’s perspective, “using the GPU” usually means two simple things:
+
+- Creating tensors or arrays *on* the GPU.
+- Making sure your models and operations run on those tensors, not on CPU copies.
+
+The frameworks you met earlier handle the low-level CUDA details for you.
+
+### PyTorch
+
+PyTorch uses the `device` concept:
+
+```python
+import torch
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Tensors on the chosen device
+x = torch.randn(1024, 1024, device=device)
+w = torch.randn(1024, 1024, device=device)
+
+y = x @ w           # runs on CPU or GPU depending on `device`
+z = torch.relu(y)
+print(z.device)     # cuda:0 or cpu
+```
+
+Typical training loop pattern:
+
+```python
+model = MyModel().to(device)
+
+for batch in loader:
+    batch = batch.to(device, non_blocking=True)
+    out = model(batch)
+    # ... loss, backward, optimizer step ...
+```
+
+Key habits:
+
+- Decide `device` once and pass it through your code.
+- Move models and data to the GPU once per step; avoid many tiny `.to("cuda")` calls in hot loops.
+
+### CuPy (NumPy-like GPU arrays)
+
+CuPy mirrors the NumPy API but executes on CUDA:
+
+```python
+import cupy as cp
+
+x = cp.random.randn(1024, 1024, dtype=cp.float32)
+y = cp.random.randn(1024, 1024, dtype=cp.float32)
+
+z = x @ y           # GPU matmul
+z = cp.tanh(z)
+
+z_host = cp.asnumpy(z)  # back to a NumPy array on the CPU
+```
+
+If you already write vectorized NumPy code, switching to CuPy is often just a matter of changing imports and managing where data lives.
+
+### Other frameworks
+
+TensorFlow and JAX follow similar ideas:
+
+- Tensors/arrays live on a device (CPU, GPU, TPU).
+- Most high-level ops automatically pick the right kernels.
+- You control placement via configuration or simple APIs.
+
+Throughout the rest of the book, we’ll treat these GPU-aware libraries as the primary interface to accelerators. Later chapters will dig into performance details, but this chapter’s goal is for “put this on the GPU and run it there” to feel like a normal, everyday part of your Python workflow.
 
 ## Hardware primer: CPUs, GPUs, TPUs, and edge devices
 
