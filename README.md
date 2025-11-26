@@ -19,7 +19,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 4. [CPU optimizations and multi-threading (vectorization, OpenMP, asyncio)](chapters/chapter-4.md)  
 5. [GPU fundamentals and CUDA basics for Python users](chapters/chapter-5.md)  
 6. [Using cuDNN, cuBLAS, and vendor libraries effectively](chapters/chapter-6.md)  
-7. Mixed precision, quantization, and numerical trade-offs  
+7. [Mixed precision, quantization, and numerical trade-offs](chapters/chapter-7.md)  
 8. Data parallelism: batch sharding and distributed dataloaders  
 9. Model parallelism: slicing large models across devices  
 10. Multi-node training and parameter servers  
