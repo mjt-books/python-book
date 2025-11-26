@@ -22,7 +22,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 7. [Mixed precision, quantization, and numerical trade-offs](chapters/chapter-7.md)  
 8. [Data parallelism: batch sharding and distributed dataloaders](chapters/chapter-8.md)  
 9. [Model parallelism: slicing large models across devices](chapters/chapter-9.md)  
-10. Multi-node training and parameter servers  
+10. [Multi-node training and parameter servers](chapters/chapter-10.md)  
 11. TPUs and accelerator-specific patterns (JAX/TPU tips)  
 12. Orchestration and scheduling with Kubernetes and Slurm  
 13. Ray, Dask, and distributed compute frameworks for Python  
