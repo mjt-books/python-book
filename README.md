@@ -20,7 +20,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 5. [GPU fundamentals and CUDA basics for Python users](chapters/chapter-5.md)  
 6. [Using cuDNN, cuBLAS, and vendor libraries effectively](chapters/chapter-6.md)  
 7. [Mixed precision, quantization, and numerical trade-offs](chapters/chapter-7.md)  
-8. Data parallelism: batch sharding and distributed dataloaders  
+8. [Data parallelism: batch sharding and distributed dataloaders](chapters/chapter-8.md)  
 9. Model parallelism: slicing large models across devices  
 10. Multi-node training and parameter servers  
 11. TPUs and accelerator-specific patterns (JAX/TPU tips)  
