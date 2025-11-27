@@ -31,5 +31,5 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 16. [Memory management, checkpointing, and fault tolerance](chapters/chapter-16.md)  
 17. [Energy efficiency and cost-aware training strategies](chapters/chapter-17.md)  
 18. [Real-world case studies: scaling transformer models end-to-end](chapters/chapter-18.md)  
-19. Tools, utilities, and CI for training pipelines (logging, metrics, tracing)  
-20. Appendix: debugging, useful libraries, and further reading
+19. [Tools, utilities, and CI for training pipelines (logging, metrics, tracing)](chapters/chapter-19.md)  
+20. [Appendix: debugging, useful libraries, and further reading](chapters/chapter-20.md)
