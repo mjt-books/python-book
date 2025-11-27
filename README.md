@@ -28,7 +28,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 13. [Ray, Dask, and distributed compute frameworks for Python](chapters/chapter-13.md)  
 14. [Edge deployment: ONNX, TensorRT, and inference on constrained devices](chapters/chapter-14.md)  
 15. [FPGA and specialized accelerators: when and how to use them](chapters/chapter-15.md)  
-16. Memory management, checkpointing, and fault tolerance  
+16. [Memory management, checkpointing, and fault tolerance](chapters/chapter-16.md)  
 17. Energy efficiency and cost-aware training strategies  
 18. Real-world case studies: scaling transformer models end-to-end  
 19. Tools, utilities, and CI for training pipelines (logging, metrics, tracing)  
