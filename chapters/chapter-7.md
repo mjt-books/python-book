@@ -330,16 +330,14 @@ Most quantization schemes work like this:
 - Pick a **scale** `s` (and sometimes a **zero-point** `z`).
 - Map a real-valued tensor `x` to an integer tensor `q`:
 
-  \[
-  q = \text{round}\left(\frac{x}{s}\right) + z
-  \]
+  You can think of this as:
+
+  `q = round(x / s) + z`
 
 - At runtime, kernels operate mostly on `q` (e.g., INT8).
 - When needed, you recover an approximate real value:
 
-  \[
-  \hat{x} = s \cdot (q - z)
-  \]
+  `x_hat = s * (q - z)`
 
 Choices you (or the tool) must make:
 
