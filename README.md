@@ -24,7 +24,7 @@ Each chapter contains conceptual explanations, code examples, profiling tips, an
 9. [Model parallelism: slicing large models across devices](chapters/chapter-9.md)  
 10. [Multi-node training and parameter servers](chapters/chapter-10.md)  
 11. [TPUs and accelerator-specific patterns (JAX/TPU tips)](chapters/chapter-11.md)  
-12. Orchestration and scheduling with Kubernetes and Slurm  
+12. [Orchestration and scheduling with Kubernetes and Slurm](chapters/chapter-12.md)  
 13. Ray, Dask, and distributed compute frameworks for Python  
 14. Edge deployment: ONNX, TensorRT, and inference on constrained devices  
 15. FPGA and specialized accelerators: when and how to use them  
