@@ -1,5 +1,5 @@
 ---
-name: create-chapter-quality-report
+name: quality-report
 description: Evaluate the active chapter against its tests.md and produce a quality-report.md
 agent: edit
 ---

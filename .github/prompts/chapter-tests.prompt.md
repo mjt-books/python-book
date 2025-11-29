@@ -1,5 +1,5 @@
 ---
-name: create-chapter-tests
+name: chapter-tests
 description: Create or update tests.md for the active chapter file
 agent: edit
 ---
