@@ -54,8 +54,13 @@ When you call something like:
 ```python
 import torch
 
-x = torch.randn(1024, 1024, device="cuda")
-y = torch.randn(1024, 1024, device="cuda")
+if not torch.cuda.is_available():
+    raise RuntimeError("This example requires a CUDA-capable GPU.")
+
+device = torch.device("cuda")
+
+x = torch.randn(1024, 1024, device=device)
+y = torch.randn(1024, 1024, device=device)
 z = x @ y
 ```
 
@@ -75,7 +80,7 @@ As a Python user, you don’t need to manage threads, blocks, and warps explicit
 - **Big, dense tensors and batched operations** map well to GPUs.
 - **Lots of tiny, irregular operations** favor CPUs or require batching/fusion to perform well on GPUs.
 
-Later in this chapter, when we talk about kernel launch configuration and performance pitfalls, we’ll keep referring back to this simple picture of “few smart CPU cores vs many simple GPU threads.”
+Later in this chapter, when we talk about kernel launch configuration and performance pitfalls, we’ll keep referring back to this simple picture of “few smart CPU cores vs many simple GPU threads” and unpack some of the execution-model details in a dedicated CUDA basics section.
 
 ## Host–device memory: transfers, layouts, and pinned memory
 
@@ -173,8 +178,14 @@ From Python, libraries hide these details, but the same ideas apply:
 
 Some Python libraries let you write simple custom kernels without leaving Python. For example, with CuPy:
 
+> Note: You’ll need CuPy installed and a CUDA-capable GPU for this example to run on the GPU.
+
 ```python
 import cupy as cp
+
+# Optionally, you can early-exit or fall back if no GPU is available.
+# CuPy will raise a helpful error if it can't find a CUDA device.
+# For this book, we assume you have a working CUDA+CuPy setup.
 
 # Elementwise kernel: y = x * x
 square = cp.ElementwiseKernel(
@@ -403,6 +414,8 @@ Note when the GPU helps and when overhead dominates (e.g., very tiny models).
 
 If you use NumPy today, try porting a simple function to CuPy:
 
+> Note: Like the earlier CuPy example, this assumes CuPy is installed and that you have a CUDA-capable GPU. If not, you can still read the code to compare the CPU vs GPU patterns.
+
 ```python
 import numpy as np
 import cupy as cp
@@ -415,6 +428,9 @@ def cpu_version():
     return np.tanh(x) * 2.0 + 1.0
 
 def gpu_version():
+    # In a real script, you might add a small check here:
+    #   if not cp.cuda.runtime.getDeviceCount():
+    #       raise RuntimeError("No CUDA device available")
     x = cp.random.randn(N, dtype=cp.float32)
     return cp.tanh(x) * 2.0 + 1.0
 
