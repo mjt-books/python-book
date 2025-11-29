@@ -11,6 +11,7 @@ Learning objectives:
 
 Sections:
 - Why vendor libraries matter (and what problems they solve)
+- Shape, layout, and dtype: what they mean
 - cuBLAS and GEMM: matrix multiplies as the core building block
 - cuDNN and convolutions: fast paths for vision and beyond
 - Framework integration: how PyTorch, TensorFlow, and JAX call into vendor libraries
@@ -36,7 +37,7 @@ For you as a Python user, the practical consequences are:
 
 The rest of this chapter is about recognizing where vendor libraries are doing work on your behalf, how to feed them “friendly” shapes and dtypes, and which knobs you can flip from Python to get more throughput before resorting to custom kernels.
 
-### Shape, layout, and dtype: what they mean
+## Shape, layout, and dtype: what they mean
 
 Because we’ll refer to these throughout the chapter, it helps to pin down a shared vocabulary:
 
@@ -193,6 +194,24 @@ TensorFlow builds a computation graph and uses a placement/optimization pass to 
 - Fused ops (e.g., conv + bias + activation) often map to specialized cuDNN kernels.
 - XLA (optional compiler) can further fuse and rearrange ops before hitting vendor libraries.
 
+A minimal example that will end up using these libraries when run on a GPU is:
+
+```python
+import tensorflow as tf
+
+# Pick a GPU device if one is available
+device = "/GPU:0" if tf.config.list_physical_devices("GPU") else "/CPU:0"
+
+with tf.device(device):
+    x = tf.random.normal((32, 784))
+    w = tf.random.normal((784, 256))
+    y = tf.matmul(x, w)  # maps to a cuBLAS GEMM on GPU
+
+    conv = tf.keras.layers.Conv2D(32, 3, padding="same")
+    img = tf.random.normal((32, 64, 64, 3))  # NHWC: batch, height, width, channels
+    out = conv(img)  # maps to cuDNN convolution kernels on GPU
+```
+
 You influence this by:
 
 - Using standard layers and fused ops where possible.
@@ -206,6 +225,24 @@ JAX traces your Python functions into an intermediate representation (HLO) and h
 - Performs fusion and layout optimization.
 - Chooses library calls (e.g., cuBLAS GEMMs) or emits custom kernels.
 - Targets GPU/TPU backends.
+
+A small, runnable example that will call into vendor libraries on a GPU is:
+
+```python
+import jax
+import jax.numpy as jnp
+
+key = jax.random.key(0)
+
+x = jax.random.normal(key, (32, 784))
+w = jax.random.normal(key, (784, 256))
+
+@jax.jit
+def forward(x, w):
+    return x @ w  # lowered to a cuBLAS GEMM on GPU
+
+y = forward(x, w)
+```
 
 From your side, JAX code looks like pure NumPy, but under the hood XLA is aggressively organizing work to feed vendor libraries and its own kernels efficiently.
 
@@ -256,17 +293,24 @@ For GEMMs, PyTorch and cuBLAS choose algorithms based on dtype and hardware. You
 
 ### TensorFlow / Keras
 
-TensorFlow exposes similar ideas via environment variables and config flags. Examples (conceptual; exact APIs may evolve):
+TensorFlow exposes similar ideas via environment variables and config flags. One commonly used API is:
 
-- Controlling deterministic ops:
+```python
+import tensorflow as tf
 
-  ```python
-  import tensorflow as tf
+# Enable deterministic behavior for supported ops (may be slower)
+tf.config.experimental.enable_op_determinism()
 
-  tf.config.experimental.enable_op_determinism()
-  ```
+# Simple check computation to run with this setting in effect
+device = "/GPU:0" if tf.config.list_physical_devices("GPU") else "/CPU:0"
 
-- Enabling or disabling autotuning for certain ops is generally handled automatically, but you can inspect logs or use XLA to change fusion/placement behavior.
+with tf.device(device):
+    x = tf.random.normal((32, 784))
+    w = tf.random.normal((784, 256))
+    y = tf.matmul(x, w)
+```
+
+Enabling determinism can make training and evaluation more reproducible at the cost of disabling some of the fastest, non-deterministic kernels.
 
 ### JAX
 
@@ -274,6 +318,24 @@ JAX leans heavily on XLA, which makes its own algorithm choices. You typically �
 
 - Dtype choices (`jnp.float32` vs `jnp.bfloat16` etc.).
 - Enabling/disabling `jit`, adjusting compilation options, or using alternative backends.
+
+A minimal example showing how `jit` changes how work is scheduled (and which kernels are emitted) is:
+
+```python
+import jax
+import jax.numpy as jnp
+
+x = jnp.ones((1024, 1024), dtype=jnp.float32)
+w = jnp.ones((1024, 1024), dtype=jnp.float32)
+
+def matmul(x, w):
+    return x @ w
+
+matmul_jit = jax.jit(matmul)
+
+y_eager = matmul(x, w)     # runs as separate ops
+y_compiled = matmul_jit(x, w)  # XLA compiles and schedules a single fused computation
+```
 
 Fine-grained control over cuDNN/cuBLAS usually isn’t exposed directly, but you can influence shapes, layouts, and precision.
 
