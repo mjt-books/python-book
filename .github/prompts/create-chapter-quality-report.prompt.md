@@ -19,7 +19,7 @@ You are acting as a test runner for a single chapter of my book.
 Use:
 - The test definitions in [tests.md](notes/${fileBasenameNoExtension}/tests.md).
 - The full chapter text in the active file [chapter](${file}).
-- Optionally, the overall book context in [README.md](README.md) if helpful.
+- The overall book context in [README.md](README.md).
 
 **Goal**
 
@@ -27,7 +27,7 @@ Generate the complete contents for a new file:
 
 - `notes/${fileBasenameNoExtension}/quality-report.md`
 
-This file is a structured evaluation of each test defined in `tests.md`.
+This file is a structured evaluation of each test defined in `notes/${fileBasenameNoExtension}/tests.md`.
 
 ---
 

@@ -15,7 +15,7 @@ You are an editor revising the *active chapter file* using the findings from its
 Use:
 - The quality report located at `notes/${fileBasenameNoExtension}/quality-report.md`.
 - The current chapter text (the active file).
-- (Optional) The book-wide context in `README.md`.
+- The book-wide context in `README.md`.
 
 ---
 
