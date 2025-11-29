@@ -251,11 +251,12 @@ for batch in loader:
 
     optimizer.zero_grad(set_to_none=True)
 
-    # Choose dtype based on config/flag
+    # Run the forward pass under autocast so eligible ops use low precision
     with autocast(dtype=torch.float16):  # or torch.bfloat16
         outputs = model(inputs)
         loss = loss_fn(outputs, targets)
 
+    # Scale the loss to avoid gradient underflow, then unscale during optimizer step
     scaler.scale(loss).backward()
     scaler.step(optimizer)
     scaler.update()
@@ -376,6 +377,7 @@ def train_step(params, opt_state, batch):
         loss = xent_loss(logits, y)  # computed in FP32
         return loss
 
+    # Compute loss and gradients w.r.t. FP32 parameters
     loss, grads = jax.value_and_grad(loss_fn)(params)
     updates, opt_state2 = optimizer.update(grads, opt_state, params)
     params2 = optax.apply_updates(params, updates)
@@ -823,7 +825,7 @@ def measure_step_time(model, loader, device, use_amp=False, amp_dtype=torch.floa
     # Grab a small iterator
     it = iter(loader)
 
-    # Warmup
+    # Warmup a few steps so timings ignore initial JIT/caching overhead
     for _ in range(10):
         try:
             inputs, targets = next(it)
@@ -843,7 +845,7 @@ def measure_step_time(model, loader, device, use_amp=False, amp_dtype=torch.floa
 
     torch.cuda.synchronize(device)
 
-    # Timed loop
+    # Timed loop over a fixed number of steps
     t0 = time.perf_counter()
     for _ in range(steps):
         try:
@@ -911,9 +913,10 @@ with torch.profiler.profile(
     record_shapes=True,
 ) as prof:
     for _ in range(20):
-        # one training or inference step under your chosen precision setup
+        # Run a few representative training or inference steps under current precision
         step()
 
+# Summarize where time is spent, focusing on the hottest CUDA kernels
 print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=15))
 ```
 
@@ -936,7 +939,7 @@ import torch
 def benchmark_inference(model, inputs, warmup=20, runs=100):
     model.eval()
     with torch.no_grad():
-        # Warmup
+        # Warmup to let kernels/cache settle before timing
         for _ in range(warmup):
             _ = model(inputs)
 
@@ -951,15 +954,6 @@ def benchmark_inference(model, inputs, warmup=20, runs=100):
 
     avg = (t1 - t0) / runs
     return avg
-
-# Example: compare FP32 vs INT8 versions on the same device
-inputs = sample_batch.to(device)
-fp32_latency = benchmark_inference(model_fp32, inputs)
-int8_latency = benchmark_inference(model_int8, inputs)
-
-print("FP32 latency:", fp32_latency)
-print("INT8 latency:", int8_latency)
-print("Speedup:", fp32_latency / int8_latency)
 ```
 
 Combine this with disk size measurements:

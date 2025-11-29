@@ -1,34 +1,36 @@
-# Tests for Chapter 7 – Make It Smaller
+# Tests for chapter-7
 
 ## Structural
-- [ ] S1: The chapter opens by clearly stating the problem of oversized, unwieldy tests and why “smaller” matters.
-- [ ] S2: The progression from problem → principles → concrete techniques is easy to follow without backtracking.
-- [ ] S3: Sections on refactoring tests, extracting helpers, and reducing fixtures are clearly separated with headings or signposts.
-- [ ] S4: Any lists of techniques (e.g., ways to shrink tests) are presented as explicit bullets or clearly enumerated items.
-- [ ] S5: The chapter ends with a short, concrete summary or checklist that reinforces the “make it smaller” practices.
+- [ ] S1: The chapter opens with a clear overview of mixed precision, quantization, and their trade-offs, and ends with exercises that tie back to these themes.
+- [ ] S2: All major sections listed in the initial “Sections” list are present in order and use consistent heading levels.
+- [ ] S3: Code examples are formatted as fenced code blocks with correct languages, and long explanations are broken into readable subsections and lists.
+- [ ] S4: The chapter maintains a logical flow from intuition (why precision matters) to formats, training patterns, quantization, stability, profiling, then exercises.
+- [ ] S5: Any forward references (e.g., “in the next section…”) correctly match actual subsequent sections.
 
 ## Clarity
-- [ ] C1: “Small” is explicitly defined (e.g., lines of code, number of concepts, setup size) rather than left vague.
-- [ ] C2: Each key term (e.g., fixture, helper, abstraction boundary) is either defined or used in a way that’s self-explanatory from context.
-- [ ] C3: Example tests that start “too big” and end “smaller” are shown side‑by‑side or in a clearly connected before/after sequence.
-- [ ] C4: The reader can tell when the chapter is giving a rule of thumb versus a hard rule (e.g., “try to” vs “must”).
-- [ ] C5: Any trade‑offs (e.g., too many helpers causing indirection) are briefly explained so the reader knows what to watch for.
+- [ ] C1: Core terms (FP32, TF32, FP16, BF16, INT8, PTQ, QAT, AMP, loss scaling) are defined in plain language before being used deeply.
+- [ ] C2: Each section includes at least one concrete example or rule of thumb that makes the abstract idea easy to apply.
+- [ ] C3: Descriptions of numerical issues (overflow, underflow, precision loss) clearly distinguish range vs precision, without heavy reliance on formal IEEE specs.
+- [ ] C4: Code snippets are self-explanatory, with variable names and brief comments that make their purpose understandable without surrounding text.
+- [ ] C5: Comparisons between formats (e.g., FP16 vs BF16 vs TF32) highlight the practical implications (range, precision, hardware support) in unambiguous terms.
 
 ## Voice & Tone
-- [ ] V1: The tone stays practical and encouraging, avoiding shaming readers for having large or messy tests today.
-- [ ] V2: The chapter speaks directly to the reader (“you”) and maintains a conversational, non‑academic style.
-- [ ] V3: The author acknowledges real‑world constraints (legacy code, time pressure) rather than assuming a greenfield ideal.
-- [ ] V4: Humor or lightness, if used, supports understanding rather than distracting from the technical guidance.
+- [ ] V1: The tone is practical and conversational, speaking directly to the reader as an engineer (using “you”) without becoming chatty or informal.
+- [ ] V2: The chapter avoids vendor hype and presents hardware/format choices in a neutral, engineering-trade-off style.
+- [ ] V3: Warnings about pitfalls (NaNs, instability, accuracy drops) are framed as actionable advice rather than fearmongering.
+- [ ] V4: The chapter maintains consistent terminology and avoids switching between multiple names for the same concept without explanation.
+- [ ] V5: Motivational asides (e.g., “keep this mental model in mind”) are used sparingly and always support understanding of the technical material.
 
 ## Reader Impact
-- [ ] R1: After reading, a mid‑level engineer should be able to name at least 3 concrete ways to make an existing large test smaller.
-- [ ] R2: The chapter gives at least one “start tomorrow” style suggestion that feels immediately applicable in a real codebase.
-- [ ] R3: The reader is warned about common failure modes (e.g., over‑abstracting helpers, hiding important details) and how to avoid them.
-- [ ] R4: The reader can imagine applying the techniques within their current team’s test suite, not only in idealized examples.
+- [ ] R1: A reader who has trained models in FP32 only could, after this chapter, confidently enable mixed precision in at least one framework they use.
+- [ ] R2: The reader comes away with a clear mental model of the trade-off “fewer bits → more performance/capacity but less numerical headroom”.
+- [ ] R3: The chapter provides at least one concrete checklist or set of steps the reader can apply when debugging numerical instability.
+- [ ] R4: The exercises are realistic and scoped so a single engineer can run them on a typical GPU/TPU setup within a few hours.
+- [ ] R5: The chapter explicitly encourages comparing precision settings using measurable metrics (speed, memory, accuracy) rather than rules of thumb alone.
 
 ## Chapter-Specific
-- [ ] X1: The chapter clearly connects “small tests” to the larger book themes of maintainability, test readability, and long‑term quality.
-- [ ] X2: At least one extended example walks through shrinking a specific test from bloated to focused, explaining each step’s intent.
-- [ ] X3: The relationship between making tests smaller and improving failure messages/debuggability is called out explicitly.
-- [ ] X4: The chapter distinguishes between making tests smaller by removing noise vs. accidentally reducing real coverage.
-- [ ] X5: The closing section makes an explicit promise or invitation about how adopting “smaller tests” will change the reader’s day‑to‑day work.
+- [ ] X1: The explanations of FP32, TF32, FP16, BF16, and INT8 clearly state what each is *good for* in modern AI workloads, not just their bit layouts.
+- [ ] X2: The mixed precision sections for PyTorch, TensorFlow, and JAX each show a minimal, idiomatic code pattern that a reader could drop into a real training loop.
+- [ ] X3: The quantization section clearly distinguishes PTQ from QAT, including when to choose each and how calibration or fake-quantization fits in.
+- [ ] X4: The numerical stability section lists concrete, actionable mitigations (e.g., loss scaling, BF16 instead of FP16, FP32 for sensitive ops) and ties them to specific failure modes.
+- [ ] X5: The profiling/benchmarking and exercises sections give the reader simple, repeatable procedures to measure speed/memory/accuracy impacts of precision changes on their own hardware.
