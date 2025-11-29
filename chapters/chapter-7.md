@@ -39,6 +39,19 @@ From a performance perspective, this gives you three main levers:
 - **Memory bandwidth:** Moving half as many bytes per element reduces pressure on memory and interconnects, letting compute units stay busier.
 - **Capacity:** Fitting more of the model and activations on-device cuts down on offloading, recomputation, and checkpoint tricks.
 
+You can see this even in a toy example. Suppose you have a model with ~1B parameters plus optimizer state, and activations that take another few GB during training:
+
+- In FP32, you might hit the memory limit of a single GPU at a modest batch size.
+- In mixed precision with FP16 activations and optimizer tricks, the same GPU may:
+  - Fit a larger batch size, **or**
+  - Fit a larger model at the same batch size.
+
+When you scale training out to multiple devices, the same trade-off shows up in your network stack. Lower-precision tensors mean:
+
+- Less data to all-reduce across devices.
+- Faster parameter synchronization.
+- More room to overlap communication and compute.
+
 The catch is numerical behavior. Fewer bits means:
 
 - Coarser spacing between representable numbers (less mantissa precision).
@@ -64,7 +77,7 @@ At a high level, most formats trade off three things:
 - **Precision:** How finely you can distinguish nearby values (number of mantissa bits).
 - **Hardware support:** Which units and fast paths the device can use.
 
-Below is a practical cheatsheet you can keep in mind when choosing formats.
+Below is a practical cheatsheet you can keep in mind when choosing formats. The ranges and layouts are deliberately approximate; the goal is intuition, not bit-perfect specs.
 
 ### FP32 (float32): the baseline
 
@@ -77,59 +90,79 @@ You’ll still see FP32 used for:
 - Master weights in mixed-precision training.
 - Optimizer state (e.g., Adam moments).
 - Reference baselines when evaluating the accuracy impact of lower precision.
+- Numerically delicate parts of the computation graph (e.g., final loss computation).
+
+If you’re not sure what precision to start with for a new model or dataset, FP32 is still the right baseline.
 
 ### TF32: GPU-friendly “almost FP32”
 
-TensorFloat-32 (TF32) is an NVIDIA-specific format exposed on many recent GPUs:
+TensorFloat-32 (TF32) is a GPU-friendly format exposed on many recent NVIDIA GPUs:
 
 - Uses an 8-bit exponent (like FP32) but a shorter mantissa (roughly FP16-like).
-- Implemented inside tensor cores; you usually enable it via libraries (cuBLAS, cuDNN) rather than handling it directly.
+- Implemented inside tensor cores; you usually enable it via libraries (cuBLAS, cuDNN) or framework flags rather than handling it directly.
+- The typical pattern is “you keep writing FP32 code, but some matmuls/convs are internally executed in TF32 on tensor cores”.
 
 In practice:
 
 - You write FP32 code.
 - The framework may downcast certain matmuls/convolutions to TF32 internally to get tensor-core speed, while keeping FP32 elsewhere.
 - Accuracy is often close enough to full FP32 for many workloads, with much higher throughput.
+- For many users, “TF32 on” is a free speedup that preserves most of FP32’s stability, especially compared to jumping straight to FP16.
+
+If you want a “safer than FP16” speed-up on supported GPUs and your framework exposes it, TF32 is often a good first switch to flip.
 
 ### FP16 (float16 / half precision)
 
 - 16 bits: 1 sign, 5-bit exponent, 10-bit mantissa.
-- Much narrower range than FP32, especially for very small/very large values.
+- Narrower range than FP32, especially for very small/very large values.
 - Aggressively used on GPUs for tensor-core acceleration.
 
 FP16 is great for:
 
 - Forward activations and many intermediate tensors.
 - Training when combined with loss scaling and FP32 master weights.
+- Inference on GPUs where FP16 tensor cores are heavily optimized.
 
 FP16 is *not* ideal for:
 
 - Accumulating large sums (e.g., reductions over big tensors).
 - Representing very small gradients without underflow.
+- Layers with especially wide or heavy-tailed activation distributions.
 
 Frameworks usually handle these pitfalls via:
 
 - Automatic loss scaling (e.g., `GradScaler` in PyTorch).
-- Performing accumulations in FP32 even when inputs are FP16.
+- Performing accumulations and some reductions in FP32 even when inputs are FP16.
+- Marking certain ops as “always FP32” under AMP/autocast.
+
+A concrete example: if you sum a long vector of FP16 values that range from `1e-1` down to `1e-8`, the smallest ones may effectively vanish, because they are below the minimum representable increment at the current scale. In FP32 those tiny contributions still show up; in FP16 they are rounded away.
+
+When you see instability under FP16 (NaNs, exploding loss, or gradients that become zero), it’s often due to this combination of smaller exponent range and fewer mantissa bits.
 
 ### BF16 (bfloat16): wider range, coarser precision
 
 Brain Floating Point 16 (bfloat16) aims to be friendlier for training:
 
 - 16 bits: 1 sign, 8-bit exponent, 7-bit mantissa.
-- Shares FP32’s exponent width (same *range*), but with fewer mantissa bits (less *precision*).
+- Shares FP32’s exponent width (similar *range*), but with fewer mantissa bits (less *precision*).
 
 This means:
 
-- Similar dynamic range to FP32, so fewer overflows/underflows.
+- Similar dynamic range to FP32, so fewer overflows/underflows than FP16.
 - Less precise values, so some extra noise, but usually acceptable for deep learning.
+- You often avoid the trickiest underflow issues that plague FP16 gradients.
 
 BF16 is popular on:
 
 - TPUs.
 - Newer GPUs and some CPUs that provide BF16-optimized paths.
 
-In many training setups, BF16 is a “safer” low-precision default than FP16: you skip a lot of loss-scaling headaches, while still getting memory and throughput gains.
+In many training setups, BF16 is a “safer” low-precision default than FP16: you skip a lot of loss-scaling headaches, while still getting memory and throughput gains. The trade-off is that BF16 sometimes gives slightly slower kernels than FP16 on the same device, depending on vendor support.
+
+A pragmatic rule of thumb:
+
+- On hardware with strong BF16 support (e.g., TPUs, newer GPUs), try BF16 first.
+- Fall back to FP16 only if you need every last bit of performance and are willing to deal with more numerical tuning.
 
 ### INT8 and lower: quantization territory
 
@@ -147,11 +180,15 @@ Benefits:
 
 - 4× smaller than FP32, 2× smaller than FP16/BF16.
 - Often runs on dedicated integer dot-product or matrix units.
+- Lower memory bandwidth and sometimes lower power per inference.
 
 Costs:
 
 - You must pick scales and zero-points carefully.
 - Accuracy can drop if quantization is too aggressive or poorly calibrated.
+- Debugging and tooling complexity go up compared to “just training with AMP”.
+
+Very low-bit formats (INT4, INT2, binary) exist as research or specialized production tools. They can deliver dramatic gains but usually need heavily customized training and are much more model- and hardware-specific than INT8.
 
 ### Putting it all together
 
@@ -163,10 +200,20 @@ A typical modern stack might look like:
   - Occasional use of TF32 under the hood on supporting GPUs.
 
 - **Inference:**
-  - Offline models in FP32 or BF16 for reference.
+  - Offline models in FP32 or BF16 for reference and evaluation.
   - Deployed models quantized to INT8 (or lower) where latency, throughput, and memory are critical.
+  - Sometimes FP16/BF16 inference as a middle ground when INT8 tooling is not mature or accuracy is too sensitive.
 
-As you read framework docs (“AMP”, “BF16 mode”, “INT8 backend”), map those options back to this mental table: which parts are in low precision, which in FP32, and how is the hardware taking advantage of that choice? The next sections will show concrete mixed-precision and quantization patterns in PyTorch, TensorFlow, and JAX.
+You can think of these formats as a ladder you climb down:
+
+- Start in FP32 for safety and simplicity.
+- Drop to TF32 or BF16 to get “easy” speedups with modest risk.
+- Move to FP16 mixed precision once you’re comfortable managing loss scaling and numerical stability.
+- Finally, add INT8 (or lower) quantization on the inference side when latency, cost, or device constraints force you to squeeze harder.
+
+As you read framework docs (“AMP”, “BF16 mode”, “INT8 backend”), map those options back to this mental table: which parts are in low precision, which in FP32, and how is the hardware taking advantage of that choice?
+
+In the next section we’ll look at concrete mixed-precision and quantization patterns in PyTorch, TensorFlow, and JAX, and how to turn these knobs without rewriting your entire training code.
 
 ## Mixed precision training patterns in PyTorch, TensorFlow, and JAX
 
@@ -177,9 +224,11 @@ Mixed precision training is mostly about two decisions:
 
 In practice, you’ll rarely hand-pick dtypes layer by layer. Instead, you enable a framework feature (AMP, BF16 mode, etc.) and then learn the common patterns and pitfalls.
 
+A good way to think about these APIs: they give you a “precision policy” that you can toggle in configuration, rather than hard-coding dtypes all over the model.
+
 ### PyTorch: autocast + GradScaler
 
-PyTorch’s recommended entry point is **automatic mixed precision (AMP)** via `torch.cuda.amp`:
+PyTorch’s recommended entry point is **automatic mixed precision (AMP)** via `torch.cuda.amp` (for CUDA) or `torch.cpu.amp` (for some CPU backends):
 
 - `autocast` decides which ops run in low precision (FP16/BF16) vs FP32.
 - `GradScaler` applies dynamic loss scaling to keep FP16 gradients from underflowing.
@@ -194,7 +243,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = MyModel().to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
-scaler = GradScaler()  # for FP16; optional for BF16
+scaler = GradScaler()  # for FP16; keep enabled=False for pure BF16 if you like
 
 for batch in loader:
     inputs, targets = batch
@@ -202,6 +251,7 @@ for batch in loader:
 
     optimizer.zero_grad(set_to_none=True)
 
+    # Choose dtype based on config/flag
     with autocast(dtype=torch.float16):  # or torch.bfloat16
         outputs = model(inputs)
         loss = loss_fn(outputs, targets)
@@ -213,15 +263,40 @@ for batch in loader:
 
 Notes:
 
-- The **model weights** typically stay in FP32 (“master weights”).
+- The **model weights** typically stay in FP32 (“master weights”). When you call `model.to(device)` without casting, this is what happens by default.
 - Forward and many matmuls/convolutions run in FP16/BF16 on tensor cores.
 - Some numerically sensitive ops (e.g., softmax, batch norm reductions) stay in FP32 automatically.
-- BF16 often works fine **without** loss scaling; FP16 usually benefits from it.
+- BF16 often works fine **without** loss scaling; for FP16, `GradScaler` is strongly recommended.
 
-Common failure modes:
+You don’t have to adopt AMP everywhere at once. A common migration path:
 
-- Loss becomes `NaN` or `inf` immediately → try BF16, lower LR, or check for bad input preprocessing.
-- Speedup is small → profile; you might be I/O-bound or running shapes that don’t hit tensor cores effectively.
+1. Implement your model and training loop in FP32.
+2. Add a `precision` flag in your config or CLI.
+3. Wrap your existing forward pass in `autocast` only when `precision` indicates mixed precision.
+4. Enable `GradScaler` only in FP16 mode.
+
+This keeps the diff small and makes it easy to turn mixed precision on and off during debugging.
+
+Common failure modes and quick responses:
+
+- Loss becomes `NaN` or `inf` immediately:
+  - Check your FP32 baseline first; the model may already be unstable.
+  - If FP32 is fine, try BF16 instead of FP16.
+  - Lower the learning rate slightly and make sure loss scaling is on.
+
+- Loss is finite but gradients become zero or training stalls:
+  - Inspect `GradScaler`’s behavior (is it constantly reducing the scale?).
+  - Try manually setting an initial scale and/or using BF16, which is less prone to gradient underflow.
+
+- Speedup is small:
+  - Profile to see if you’re input- or CPU-bound (data loading, preprocessing).
+  - Check that your matmul shapes actually hit tensor cores (very tiny matmuls won’t).
+  - Ensure you’re not accidentally forcing most ops back to FP32 with custom casts.
+
+Over time, you can refine your setup with tricks like:
+
+- Keeping embeddings or very large lookup tables in FP32 if you see accuracy regressions.
+- Using AMP on some submodules but not others (via nested `autocast(enabled=False)` contexts).
 
 ### TensorFlow / Keras: global policy + `mixed_precision`
 
@@ -237,7 +312,7 @@ mixed_precision.set_global_policy("mixed_float16")  # or "mixed_bfloat16"
 model = build_model()            # layers will use the policy's compute dtype
 optimizer = tf.keras.optimizers.Adam()
 
-# Keras will wrap the optimizer for you when using mixed_float16
+# With "mixed_float16", Keras wraps the optimizer to handle loss scaling.
 model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy")
 
 model.fit(dataset, epochs=10)
@@ -253,8 +328,16 @@ If you’re working with lower-level `tf.function`s, you can still control dtype
 
 Things to watch:
 
-- Check that your input pipeline feeds data in a reasonable dtype (e.g., FP32 cast down by the policy).
+- Ensure your input pipeline produces reasonable dtypes:
+  - It’s common to store data as integers or FP32 and rely on the policy to cast to FP16/BF16 later.
 - Inspect training/validation metrics against an FP32 baseline to ensure accuracy stays acceptable.
+- When debugging, temporarily switch the global policy back to `"float32"`; if the issue disappears, it’s likely precision-related.
+
+A simple pattern for experimentation:
+
+- Start with `"float32"` and get a clean baseline.
+- Flip to `"mixed_bfloat16"` on supported hardware; re-run a short training job.
+- If that’s stable and gives a speedup, try `"mixed_float16"` if you want to chase more performance.
 
 ### JAX: dtype discipline and `jax.lax` control
 
@@ -281,7 +364,8 @@ def forward(params, x):
     x = x.astype(compute_dtype)
     # ... your model computation ...
     logits = ...
-    return logits.astype(jnp.float32)  # often convert back for loss
+    # Often convert back to FP32 for loss and metrics
+    return logits.astype(jnp.float32)
 
 @jax.jit
 def train_step(params, opt_state, batch):
@@ -302,7 +386,13 @@ Key habits in JAX:
 
 - Be explicit about when you cast to/from low precision.
 - Keep reductions and loss computations in FP32.
-- Rely on XLA to choose good internal formats (e.g., TF32 on NVIDIA by default).
+- Rely on XLA to choose good internal formats (e.g., TF32 on NVIDIA by default, BF16 on TPUs).
+
+If you see instability when you switch to BF16/FP16, narrow it down by:
+
+- Casting only certain submodules to low precision first.
+- Using JAX’s debug/NaN checking utilities to catch where things go wrong.
+- Comparing per-layer statistics (means, variances) between FP32 and low-precision runs.
 
 ### Choosing where to start
 
@@ -347,6 +437,20 @@ Choices you (or the tool) must make:
 
 You rarely implement this manually; instead, you configure a quantization tool and inspect its decisions.
 
+A tiny toy example in pseudocode:
+
+```python
+# Toy symmetric per-tensor quantization to INT8
+x = ...  # FP32 tensor
+max_val = x.abs().max()
+scale = max_val / 127.0  # map [-max_val, max_val] to [-127, 127]
+
+q = torch.round(x / scale).clamp(-127, 127).to(torch.int8)
+x_hat = (q.float() * scale)  # approximate reconstruction
+```
+
+Real frameworks do more (per-channel scales, careful calibration, better clipping strategies), but the principle is the same.
+
 ### PTQ: Post-training quantization
 
 **Post-training quantization** takes a trained FP32/mixed model and converts it *after* training, without changing the original training loop.
@@ -367,7 +471,7 @@ Pros:
 
 Cons:
 
-- Accuracy can drop noticeably for sensitive models (e.g., some generative models, regressors, smaller networks).
+- Accuracy can drop noticeably for sensitive models (e.g., some generative models, small/narrow networks, regression models).
 - You have less control over how the model adapts to quantization noise.
 
 Example with PyTorch’s built-in PTQ (schematic, not a full listing):
@@ -386,6 +490,8 @@ torch.save(model_int8.state_dict(), "model_int8.pt")
 ```
 
 For deployment, you benchmark both versions and check that the accuracy drop is acceptable given the speed/memory gains.
+
+A small practical tip: calibration data quality matters. Using “real” production-like inputs tends to produce better scales than using a handful of random batches.
 
 ### QAT: Quantization-aware training
 
@@ -407,6 +513,7 @@ Cons:
 
 - Requires changes to the training setup.
 - Training becomes a bit more complex and sometimes slightly slower.
+- You have yet another training variant to maintain.
 
 Schematic PyTorch QAT sketch:
 
@@ -421,15 +528,22 @@ from torch.ao.quantization import (
 model = build_model()
 model.train()
 
+# Choose a backend (e.g., "fbgemm" for x86, "qnnpack" for mobile)
 model.qconfig = get_default_qat_qconfig("fbgemm")
 model = prepare_qat(model)  # inserts fake-quant modules
 
-# ... train as usual for some epochs ...
+# ... train as usual for some epochs, possibly starting from a pretrained checkpoint ...
 
 model_int8 = convert(model.eval())  # produces a quantized model for inference
 ```
 
 TensorFlow and ONNX Runtime provide similar QAT flows via their tooling (e.g., TensorFlow Model Optimization Toolkit).
+
+A common pattern is:
+
+- Train a model in FP32 or mixed precision until convergence.
+- Fine-tune with QAT for a smaller number of epochs.
+- Export and deploy the quantized version.
 
 ### Deployment toolchains: ONNX, TensorRT, and friends
 
@@ -459,9 +573,15 @@ Common players:
 A minimal conceptual ONNX + TensorRT-style pipeline:
 
 1. Export your FP32 or mixed-precision model to ONNX.
-2. Run a quantization tool to produce an INT8 ONNX graph.
+2. Run a quantization tool to produce an INT8 ONNX graph (PTQ or QAT-based).
 3. Feed that graph into TensorRT to build an engine.
 4. Benchmark latency/throughput vs FP32/FP16 baselines.
+
+When choosing a toolchain, keep in mind:
+
+- What devices you’re actually deploying on (CPU, GPU, mobile, custom accelerator).
+- How mature the quantization support is for your target ops and architectures.
+- How much extra operational complexity your team can absorb.
 
 ### When to reach for quantization
 
@@ -532,6 +652,8 @@ Mitigations:
   - Replace `softmax(x)` with `softmax(x - x.max(dim=...)` for numerical stability.
   - Use `logsumexp` instead of `log(softmax)` patterns.
 
+A practical debugging trick: log the maximum absolute value of activations or gradients for a handful of layers with both FP32 and FP16/BF16 runs. If the low-precision run shows activations that spike orders of magnitude higher, overflow is a likely culprit.
+
 ### Pitfall 2: Loss of precision in reductions
 
 Even if values stay in range, summing many low-precision values can introduce significant error:
@@ -547,9 +669,11 @@ Mitigations:
 
 - **Structure computations to reduce dynamic range within a reduction:**
   - For example, subtract means before squaring for variance calculations.
+  - Use numerically stable algorithms (e.g., `logsumexp`, Kahan-like summation when you implement custom reductions).
 
 - **Be cautious with very long sequences or massive batch sizes:**
   - The more terms you add, the more rounding matters.
+  - If you see subtle accuracy drift that grows with sequence length or batch size, this is a suspect.
 
 ### Pitfall 3: Sensitive layers and operations
 
@@ -558,6 +682,7 @@ Some parts of a model are simply more sensitive to precision than others:
 - Normalization layers (BatchNorm, LayerNorm).
 - Attention softmax and log-probability computations.
 - Final classification layers and loss calculations.
+- Some custom operations with exponentials, divisions, or subtractions of nearly equal numbers.
 
 Mitigations:
 
@@ -567,9 +692,25 @@ Mitigations:
 
 - **Keep logits and losses in FP32:**
   - Cast back from FP16/BF16 to FP32 before computing cross-entropy or similar losses.
+  - This reduces the risk of underflow in probabilities and improves stability of gradients.
 
 - **In quantization:**
   - Consider leaving especially sensitive layers in higher precision (e.g., keep first/last layers FP16/FP32 while quantizing the middle).
+  - Some toolchains support per-op precision decisions; take advantage of that instead of blindly quantizing the entire graph.
+
+### Pitfall 4: Interaction with optimization and regularization
+
+Precision issues often show up only in combination with other training choices:
+
+- Very aggressive learning rates or schedules.
+- Optimizers with complex internal state (e.g., Adam variants).
+- Strong regularization or normalization that already pushes values close to numeric limits.
+
+Things to consider:
+
+- **Learning rate:** low precision tends to prefer slightly more conservative LR schedules. If your FP32 run is already “right on the edge,” FP16 may tip it over.
+- **Optimizer state:** keep optimizer state (e.g., Adam moments) in FP32 even if activations and some weights are lower precision.
+- **Regularization:** when debugging, temporarily disable or weaken regularizers (dropout, weight decay) to see if they interact badly with reduced precision.
 
 ### Debugging strategies
 
@@ -593,6 +734,7 @@ When something goes wrong under low precision, try to narrow down *where* it sta
    - Start with FP32 everywhere.
    - Then enable BF16 or FP16 for a subset of layers (e.g., only MLP blocks, not norm/attention).
    - Observe when instability appears.
+   - This can quickly highlight one problematic submodule.
 
 4. **Turn off specific optimizations.**
    - Disable certain fused kernels or TF32/INT8 paths to see if the issue is kernel-specific.
@@ -601,6 +743,11 @@ When something goes wrong under low precision, try to narrow down *where* it sta
 5. **Log statistics instead of raw tensors.**
    - Track per-layer mean, std, max, min over a few batches.
    - Look for layers where variance explodes or collapses when switching precision.
+   - Compare these statistics between FP32 and low-precision runs.
+
+6. **For quantized models, test layer-by-layer.**
+   - Some tools let you run a “hybrid” model where only part of the graph is quantized.
+   - Use this to identify which layers contribute most to accuracy loss.
 
 ### Practical mitigation checklist
 
@@ -774,7 +921,7 @@ Run this once for FP32 and once for AMP; check:
 
 - Which ops dominate CUDA time.
 - Whether low-precision kernels (e.g., tensor core matmuls) appear in the AMP run but not in FP32.
-- If time moved from GPU to CPU kernels (a sign of hidden bottlenecks).
+- If time moved from GPU to CPU kernels (a sign of hidden bottlenecks like data loading).
 
 Other frameworks offer similar tooling (TensorFlow Profiler, JAX’s `jax.profiler` and XLA plugin).
 
@@ -793,11 +940,13 @@ def benchmark_inference(model, inputs, warmup=20, runs=100):
         for _ in range(warmup):
             _ = model(inputs)
 
-        torch.cuda.synchronize() if inputs.is_cuda else None
+        if inputs.is_cuda:
+            torch.cuda.synchronize()
         t0 = time.perf_counter()
         for _ in range(runs):
             _ = model(inputs)
-        torch.cuda.synchronize() if inputs.is_cuda else None
+        if inputs.is_cuda:
+            torch.cuda.synchronize()
         t1 = time.perf_counter()
 
     avg = (t1 - t0) / runs
@@ -825,8 +974,8 @@ You’ll get a quick view of size and speed trade-offs.
 
 Once you have basic measurements, interpret them in light of your constraints:
 
-- If mixed precision gives you **1.7×** speedup and **~40%** memory savings with negligible accuracy loss, it’s usually a clear win.
-- If quantization yields **2–3×** faster inference but costs **1–2 points** of accuracy, decide whether that trade-off is acceptable for your application.
+- If mixed precision gives you a substantial speedup and noticeable memory savings with negligible accuracy loss, it’s usually a clear win.
+- If quantization yields much faster inference but costs some accuracy, decide whether that trade-off is acceptable for your application.
 - If gains are small (e.g., <10%), investigate:
   - Are you I/O-bound (dataloaders, preprocessing, network)?
   - Are batch sizes too small to saturate the device?
@@ -862,9 +1011,11 @@ Then, create a tiny summary table, for example:
 
 | Run            | Step time (s) | Speedup vs FP32 | Peak mem (GB) | Val accuracy |
 |----------------|---------------|-----------------|---------------|--------------|
-| FP32           | 0.120         | 1.0×            | 8.0           | 91.2%        |
-| AMP (FP16)     | 0.070         | 1.7×            | 4.7           | 90.9%        |
-| AMP (BF16)     | 0.075         | 1.6×            | 4.9           | 91.0%        |
+| FP32           |               | 1.0×            |               |              |
+| AMP (FP16)     |               |                 |               |              |
+| AMP (BF16)     |               |                 |               |              |
+
+Fill in the numbers for your setup.
 
 Questions to reflect on:
 
@@ -885,16 +1036,11 @@ Do this once for FP32 and once with mixed precision enabled. Record:
 - Maximum batch size that trains without OOM in each mode.
 - Peak memory usage reported by your framework (if available).
 
-You should see something like:
-
-- FP32 max batch size: 128
-- AMP max batch size: 256 or 512
-
-This gives you a concrete sense of how much extra “capacity” lower precision buys you.
+You might see something like “I can fit 2×–4× larger batches with AMP than with FP32”, which directly ties precision choice to capacity.
 
 ### 3. Quantize an inference model and measure latency/accuracy
 
-Pick a trained inference model (e.g., ResNet on ImageNet or a smaller classifier). Run three experiments:
+Pick a trained inference model (e.g., a ResNet on ImageNet or a smaller classifier). Run three experiments:
 
 1. **FP32 baseline**
    - Run inference on a fixed evaluation set.
@@ -915,9 +1061,9 @@ Summarize the results in a table:
 
 | Precision | Model size | Latency (ms/img) | Speedup vs FP32 | Accuracy |
 |-----------|------------|------------------|-----------------|----------|
-| FP32      | 100 MB     | 4.0              | 1.0×            | 75.2%    |
-| FP16      | 50 MB      | 2.6              | 1.5×            | 75.0%    |
-| INT8      | 25 MB      | 1.8              | 2.2×            | 74.5%    |
+| FP32      |            |                  | 1.0×            |          |
+| FP16      |            |                  |                 |          |
+| INT8      |            |                  |                 |          |
 
 Questions:
 
@@ -946,7 +1092,7 @@ Then apply some of the mitigation strategies from the “Numerical stability” 
 - Forcing certain layers (normalization, softmax, loss) back to FP32.
 - Slightly lowering the learning rate.
 
-See which changes restore stability.
+See which changes restore stability, and note which parts of the model are most sensitive to precision.
 
 ### 5. Optional: build a simple “precision toggle” in a config
 
@@ -969,3 +1115,5 @@ Then, for any new model you prototype, you can:
 - Decide, with measurements, whether to keep it on for that project.
 
 These exercises don’t require large clusters or long runs; they’re intentionally small and repeatable. If you save a few scripts and result tables now, you’ll have a personal reference for how your favorite models and your usual hardware respond to different precision choices—which is often more useful than any single benchmark in a paper.
+
+Over time, this mental and empirical toolkit lets you treat “precision” as just another design dimension—alongside model architecture, optimizer choice, and data pipeline—rather than a mysterious hardware trick that you either “turn on” or “turn off”.
