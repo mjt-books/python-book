@@ -53,7 +53,9 @@ Some key ideas:
 
 - **Intra-node vs inter-node**: Within a single node, GPUs might talk over PCIe or NVLink; between nodes, they talk via the NIC. Intra-node bandwidth is usually much higher and latency much lower than inter-node. Good distributed libraries try to use the fastest path available (e.g., NCCL using NVLink inside a node and InfiniBand across nodes).
 
-- **Bandwidth and latency**: Bandwidth is “how many bytes per second” you can move; latency is “how long until the first byte arrives.” Large all-reduce operations are mostly limited by bandwidth; frequent small control messages are more sensitive to latency. Architectures like parameter servers or gradient compression play with this trade-off.
+- **Bandwidth and latency**: Bandwidth is “how many bytes per second” you can move; latency is “how long until the first byte arrives.” Large all-reduce operations are mostly limited by bandwidth; frequent small control messages are more sensitive to latency. Architectures like parameter servers or gradient compression play with this trade-off.  
+
+  As a rough mental model, imagine each worker needs to all-reduce a 400 MB gradient tensor every step. On a fast intra-node link (say, NVLink-class), that might effectively behave like copying a few hundred MB inside one box and contribute on the order of a few milliseconds per step. On a slower 1 Gbps inter-node link, that same 400 MB has to cross the network and can easily add **seconds** of communication time if it can’t be overlapped with compute, while a 100 Gbps link shrinks that contribution back down toward tens of milliseconds. Even if you don’t know the exact numbers for your cluster, this illustrates why the same code can scale nicely on one network and stall on another.
 
 - **Oversubscription and noisy neighbors**: On shared clusters, you rarely own the entire network. Other jobs may be sending traffic across the same links, reducing your effective bandwidth and increasing jitter. This is why the same training job can scale nicely one day and poorly the next, even on identical node types.
 
@@ -196,6 +198,23 @@ In asynchronous variants:
 - Workers do **not** wait for each other.
 - Each worker sends gradients as it finishes and pulls parameters whenever it needs them.
 - The PS applies updates as they arrive, so different workers may see slightly different versions of the model (so-called **stale gradients**).
+
+### Synchronous vs. asynchronous at a glance
+
+It’s useful to line up the two big patterns you’ve seen so far:
+
+- **Synchronous collectives (e.g., DDP-style all-reduce)**  
+  - All participating workers move in lockstep: each step has an implicit global barrier during the all-reduce.  
+  - Everyone sees the **same parameters** at the end of each step, which makes behavior close to single-node training with a larger batch.
+
+- **Asynchronous parameter servers**  
+  - Workers run at their own pace: fast workers can do more steps while slow workers lag behind.  
+  - Different workers may see **slightly different parameter versions** because updates are applied as they arrive.
+
+A practical rule of thumb:
+
+> If your model is dense and fits comfortably on each worker, prefer **synchronous all-reduce** for predictability and ease of reasoning.  
+> If your model is huge, sparse, or you expect highly variable worker speeds, **PS-style async or partially sync** designs can keep the cluster busier at the cost of more careful tuning.
 
 ### Why parameter servers?
 
