@@ -36,6 +36,22 @@ For you as a Python user, the practical consequences are:
 
 The rest of this chapter is about recognizing where vendor libraries are doing work on your behalf, how to feed them “friendly” shapes and dtypes, and which knobs you can flip from Python to get more throughput before resorting to custom kernels.
 
+### Shape, layout, and dtype: what they mean
+
+Because we’ll refer to these throughout the chapter, it helps to pin down a shared vocabulary:
+
+- **Shape**: the sizes of each tensor dimension, e.g. `(batch=32, features=1024)` or `(N=32, C=3, H=224, W=224)`. Changing shape alters *how much* work there is and how well it tiles onto the hardware (e.g., many tiny matmuls vs a few large ones).
+- **Layout**: the order and stride pattern of dimensions in memory, e.g. `NCHW` vs `NHWC` for images, or contiguous vs non-contiguous tensors. Layout affects whether the library can read/write memory in large, coalesced chunks or has to jump around.
+- **Dtype (data type)**: how each element is represented numerically, e.g. `float32`, `float16`, `bfloat16`, `int8`. Dtype controls numerical precision and which hardware units (FP32 cores, tensor cores, etc.) and algorithms can be used.
+
+Performance-sensitive libraries care about *all three*:
+
+- The **shape** determines problem size and tiling opportunities.
+- The **layout** determines memory access patterns and cache behavior.
+- The **dtype** determines which fast paths (like tensor cores or INT8 kernels) are available.
+
+When later sections say “this kernel is faster for certain shapes/layouts/dtypes,” they are referring back to these three separate, tunable levers.
+
 ## cuBLAS and GEMM: matrix multiplies as the core building block
 
 If you had to pick one operation that defines modern deep learning on GPUs, it would be **GEMM**: General Matrix–Matrix Multiply. cuBLAS is NVIDIA’s highly optimized library for GEMM and related BLAS routines. Whenever you see a big dense linear layer or attention projection, there is almost certainly a GEMM—and therefore cuBLAS—under the hood.
