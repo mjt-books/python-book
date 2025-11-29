@@ -36,7 +36,13 @@ Finally, understanding CPU behavior helps you reason about the whole system: how
 
 ## Vectorization basics: NumPy, broadcasting, and avoiding Python loops
 
-The easiest way to speed up CPU-bound numerical code in Python is to *stop writing the inner loops in Python*. Vectorized libraries like NumPy execute those loops in optimized C with SIMD instructions and multi-threading, while Python handles only high-level orchestration.
+The easiest way to speed up CPU-bound numerical code in Python is to *stop writing the inner loops in Python*. Vectorized libraries like NumPy execute those loops in optimized C with SIMD instructions and (for some operations) multi-threading, while Python handles only high-level orchestration.
+
+Conceptually, “vectorization” here means:
+
+- You hand an entire array to a function.
+- That function implements the loops in C.
+- The C code uses SIMD instructions so a single CPU instruction operates on multiple elements at once.
 
 Consider a simple example: computing the L2 norm of each row in a large matrix.
 
@@ -70,8 +76,8 @@ def row_norms_numpy(x):
 On large inputs, `row_norms_numpy` is typically orders of magnitude faster, because:
 
 - The inner loops run in C instead of Python.
-- NumPy can use SIMD instructions (e.g., AVX/AVX-512).
-- NumPy can leverage multi-threaded BLAS/OpenMP where appropriate.
+- NumPy can use SIMD instructions (e.g., AVX/AVX-512) when compiled with an appropriate toolchain.
+- NumPy can leverage multi-threaded BLAS/OpenMP where appropriate for some operations (e.g., large matrix multiplies and reductions), depending on how it was built.
 
 Broadcasting lets you apply operations across arrays of different but compatible shapes without explicit Python loops. For example, subtracting a per-feature mean from every row:
 
@@ -90,6 +96,7 @@ A few practical guidelines:
 - **Think in arrays, not scalars**: whenever you see a `for` loop touching every element of a large list/array, ask if it can become a single NumPy expression.
 - **Fuse operations**: `y = (x * x + 1.0).sum(axis=1)` is better than a series of intermediate Python-level loops and temporaries.
 - **Watch memory**: vectorization can create large temporary arrays. Use in-place ops (`x *= 2`) or functions like `np.einsum`/`np.dot` when appropriate to keep things compact.
+- **Know when NumPy isn’t enough**: if a tight loop truly can’t be expressed with array operations, consider tools like Numba or Cython before reaching for low-level threading.
 
 We’ll use this mental model throughout the chapter: first try to express the work as a few high-level array operations; only if that fails do we consider more explicit threading or lower-level optimizations.
 
@@ -149,6 +156,7 @@ A few practical points and limits:
 - **Overhead**: Spawning many processes and shipping large arrays between them can cost more than you gain. Aim for *fewer, chunkier* tasks rather than thousands of tiny ones.
 - **Shared state**: Threads share memory but require careful synchronization (locks, queues). Processes don’t share memory by default, so you pass data via pickling or shared memory primitives.
 - **GIL-friendly code**: Many numeric libraries (NumPy, PyTorch, etc.) release the GIL while doing heavy work in C. In those cases, threads can still help, because the true bottleneck isn’t the Python interpreter.
+- **Python version differences**: Some newer Python runtimes experiment with no-GIL builds, but most production environments still use a GIL. Always check the behavior for the specific interpreter you run on.
 
 In this chapter we’ll mostly use threads for I/O-bound parts of the pipeline (data loading, prefetching, logging) and processes for CPU-heavy Python code that can’t easily be vectorized. Later sections will connect this to native libraries (BLAS, OpenMP) that give you multi-threading “for free” under the hood.
 
@@ -190,13 +198,33 @@ A few practical guidelines:
 
 - **Prefer library calls over manual loops**: if a problem can be expressed as matrix multiplies, convolutions, or reductions, let BLAS or other native kernels handle it.
 - **Avoid “double parallelism”**: don’t spawn N Python workers each calling an N-threaded BLAS routine; you’ll end up with N×N threads fighting for the same cores. Either reduce BLAS threads per process or reduce the number of processes.
-- **Know your stack**: check which BLAS your NumPy/PyTorch build uses (`np.__config__.show()`, PyTorch build logs) so you know which env vars actually matter.
+- **Know your stack**: check which BLAS your NumPy/SciPy build uses with:
+
+  ```python
+  import numpy as np
+  np.__config__.show()
+  ```
+
+  For PyTorch, look at:
+
+  ```python
+  import torch
+  print("Intra-op threads:", torch.get_num_threads())
+  print("Inter-op threads:", torch.get_num_interop_threads())
+  ```
+
+  or its build/config logs.
+
+- **Recognize library-level multi-threading in practice**:
+  - When you call a single big operation (e.g., `A @ B`) from a *single* Python thread and `htop` shows many cores spike to high CPU at the same time, the library is likely spawning threads for you.
+  - If one Python process hits ~700–800% CPU on an 8‑core machine during a matrix multiply without you creating extra threads/processes, you’re already getting multi-threaded BLAS/OpenMP.
+- **Measure, don’t guess**: small changes in matrix shapes, BLAS implementations, or thread counts can flip which configuration is fastest, so verify with quick benchmarks on your own hardware.
 
 The big idea is that you rarely need to write OpenMP or SIMD intrinsics yourself. Instead, you:
 
 1. Express work in terms of high-level operations that map to fast native kernels.
 2. Set a few environment variables or config options so those kernels use your CPU effectively.
-3. Measure with the profiling techniques from chapter 3 to confirm that CPU cores are busy and not oversubscribed.
+3. Confirm, using `htop` and quick timing experiments, that library calls actually light up multiple cores rather than sitting mostly single‑threaded.
 
 ## Async I/O with `asyncio` for data pipelines
 
@@ -254,6 +282,7 @@ Practical tips:
 - Keep async functions mostly I/O-bound; if they become CPU-heavy, move the heavy part to a thread/process pool (`loop.run_in_executor` or `asyncio.to_thread`).
 - Don’t mix `asyncio` and thread/process pools casually without measuring—complexity adds up quickly.
 - Treat `asyncio` as another way to keep CPUs busy *while they wait*, not as a replacement for vectorization or proper multi-threaded native libraries.
+- Start small: introduce `asyncio` around a clearly I/O-heavy boundary (such as batched remote file reads) before refactoring an entire pipeline.
 
 In later chapters, when we build more complex input pipelines, you’ll see how to combine `asyncio`, threads, and native code so that data keeps flowing fast enough to stay ahead of your accelerators.
 
@@ -368,6 +397,8 @@ print("NumPy vectorized:", t1 - t0, "s")
 
 Compare times and confirm that results are close (`np.allclose`).
 
+If you’re curious, try changing `dtype` between `float32` and `float64` to see how it affects speed and memory usage on your machine.
+
 ### 2. Parallelize a CPU-heavy function with processes
 
 Take a CPU-bound function:
@@ -408,7 +439,7 @@ run_par(workers=2)
 run_par(workers=4)
 ```
 
-Observe how speedup changes with the number of workers.
+Observe how speedup changes with the number of workers, and whether results from `run_seq` and `run_par` match closely.
 
 ### 3. Observe CPU utilization while scaling workers
 
@@ -416,6 +447,7 @@ Re-run exercise 2, but this time watch CPU usage with `htop` or `top` as you cha
 
 - At what point do extra workers stop helping?
 - Do all cores get used, or are some idle?
+- Does the machine start to feel overloaded (e.g., context switching, fan noise) when you use too many workers?
 
 ### 4. Optional: add async I/O around a small CPU core
 
@@ -425,4 +457,4 @@ Mock a tiny pipeline where you:
 - Use `asyncio.to_thread` (or a thread pool) to run a small CPU-bound function on each.
 - Measure how total time changes vs a purely sequential version.
 
-Even a toy example is enough to see how overlapping I/O and CPU work can keep your machine busier without changing hardware.
+Even a toy example is enough to see how overlapping I/O and CPU work can keep your machine busier without changing hardware. You’ll reuse the same ideas when building real-world input pipelines around your models.
