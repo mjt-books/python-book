@@ -1,4 +1,4 @@
-# A book on Python
+# Python For AI
 
 A practical, professional (and occasionally playful), example-driven guide to using Python for AI across CPUs, GPUs, TPUs, edge devices, and clusters. Packed with runnable code, hands-on recipes, and 20 focused chapters on reproducible environments, performance optimization, and scalable training and inference.
 
