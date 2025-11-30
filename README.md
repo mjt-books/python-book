@@ -1,6 +1,6 @@
 # A book on Python
 
-A practical, professional — and occasionally playful — guide to using Python and AI to harness multiple hardware resources. This book contains example code, hands-on recipes, and 20 chapters focused on scaling AI across CPUs, GPUs, TPUs, edge devices, and clusters.
+A practical, professional (and occasionally playful), example-driven guide to using Python for AI across CPUs, GPUs, TPUs, edge devices, and clusters. Packed with runnable code, hands-on recipes, and 20 focused chapters on reproducible environments, performance optimization, and scalable training and inference.
 
 Key points:
 - Example-rich, runnable code
