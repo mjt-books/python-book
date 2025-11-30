@@ -127,7 +127,7 @@ import numpy as np
 
 # Load session with desired providers
 sess_options = ort.SessionOptions()
-sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL  # Enable all graph optimizations
 
 providers = ["CPUExecutionProvider"]  # or ["CUDAExecutionProvider", "CPUExecutionProvider"]
 session = ort.InferenceSession("model.onnx", sess_options, providers=providers)
@@ -139,11 +139,13 @@ print("Input:", input_name, session.get_inputs()[0].shape, session.get_inputs()[
 print("Output:", output_name)
 
 # Prepare dummy input with correct shape
-dummy = np.random.randn(1, 3, 224, 224).astype(np.float32)
+dummy = np.random.randn(1, 3, 224, 224).astype(np.float32)  # Example input matching model shape
 
 # Run inference
-outputs = session.run([output_name], {input_name: dummy})
+outputs = session.run([output_name], {input_name: dummy})  # Outputs is a list of model outputs
+# outputs[0] contains the actual model output
 ```
+*# The above code loads an ONNX model, inspects input/output details, prepares a dummy input, and runs inference. Adjust providers for your hardware.*
 
 For edge devices, a few ORT knobs matter:
 
@@ -172,8 +174,9 @@ trtexec \
   --minShapes=input:1x3x224x224 \
   --optShapes=input:1x3x224x224 \
   --maxShapes=input:1x3x224x224 \
-  --fp16
+  --fp16  # Use FP16 precision for better performance on supported hardware
 ```
+*# This command builds a TensorRT engine from an ONNX model, optimized for FP16 precision and batch size 1.*
 
 Key TensorRT concepts for edge:
 
@@ -218,29 +221,32 @@ import onnxruntime as ort
 
 def load_session(path: str) -> ort.InferenceSession:
     sess_options = ort.SessionOptions()
-    sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL  # Enable all graph optimizations
     providers = ["CPUExecutionProvider"]  # or CUDA/TensorRT on supported devices
     return ort.InferenceSession(path, sess_options, providers=providers)
 
 def preprocess(frame) -> np.ndarray:
-    # 1. Resize/crop
+    # 1. Resize/crop input frame to model's expected size
     # 2. Convert to RGB / float32
-    # 3. Normalize and arrange to NCHW
+    # 3. Normalize and arrange to NCHW format
     # Keep this as vectorized NumPy/CuPy code; avoid per-pixel Python loops.
     # return array of shape (1, C, H, W)
     ...
+    # Example: return np.transpose(frame, (2, 0, 1))[None].astype(np.float32)
+    # Add normalization as needed
 
 def postprocess(raw_output):
     # Map raw logits / scores / boxes to application-level decisions.
     # Keep allocations minimal; reuse buffers where possible.
     ...
+    # Example: return np.argmax(raw_output, axis=1)  # For classification
 
 def main_loop():
     session = load_session("model.onnx")
     input_name = session.get_inputs()[0].name
     output_name = session.get_outputs()[0].name
 
-    # Warmup
+    # Warmup: run a dummy inference to trigger runtime optimizations
     dummy = np.zeros((1, 3, 224, 224), dtype=np.float32)
     session.run([output_name], {input_name: dummy})
 
@@ -248,11 +254,11 @@ def main_loop():
         t0 = time.perf_counter()
         frame = ...  # grab from camera / sensor
         t1 = time.perf_counter()
-        x = preprocess(frame)
+        x = preprocess(frame)  # Preprocess input frame
         t2 = time.perf_counter()
-        y = session.run([output_name], {input_name: x})[0]
+        y = session.run([output_name], {input_name: x})[0]  # Run inference
         t3 = time.perf_counter()
-        result = postprocess(y)
+        result = postprocess(y)  # Postprocess model output
         t4 = time.perf_counter()
 
         print(
@@ -262,8 +268,9 @@ def main_loop():
 
         # Use `result` inside your application
         ...
-
+        # Example: display result, send to actuator, etc.
 ```
+*# This pipeline loads an ONNX model, preprocesses input, runs inference, postprocesses output, and prints timing for each stage. Replace ... with device-specific code.*
 
 Even this toy loop captures two important edge patterns:
 
@@ -286,12 +293,13 @@ Example of a minimal “does this pipeline still work?” test:
 ```python
 def test_pipeline_smoke():
     session = load_session("model.onnx")
-    dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    x = preprocess(dummy_frame)
-    y = session.run(None, {session.get_inputs()[0].name: x})[0]
-    assert y.ndim == 2
-    assert not np.isnan(y).any()
+    dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)  # Simulate a blank image
+    x = preprocess(dummy_frame)  # Preprocess to model input format
+    y = session.run(None, {session.get_inputs()[0].name: x})[0]  # Run inference
+    assert y.ndim == 2  # Output should be 2D (batch, classes)
+    assert not np.isnan(y).any()  # Check for valid outputs
 ```
+*# This test checks that the pipeline runs end-to-end and produces valid outputs.*
 
 Once this passes reliably on your dev machine, you copy the same code and model artifact onto the edge target and repeat the checks there, then add device-specific concerns like power draw and thermals.
 
@@ -344,10 +352,10 @@ Next, probe what your inference stack sees. For ONNX Runtime:
 ```python
 import onnxruntime as ort
 
-print("Available execution providers:", ort.get_available_providers())
+print("Available execution providers:", ort.get_available_providers())  # List available backends
 
 sess = ort.InferenceSession("model.onnx", providers=["CPUExecutionProvider"])
-print("Session providers:", sess.get_providers())
+print("Session providers:", sess.get_providers())  # Show which providers are active for this session
 ```
 
 On a CPU-only board you might see:
@@ -369,11 +377,11 @@ For PyTorch (useful during experimentation):
 ```python
 import torch
 
-print("CUDA available:", torch.cuda.is_available())
-print("GPU count:", torch.cuda.device_count())
+print("CUDA available:", torch.cuda.is_available())  # Check if CUDA is available
+print("GPU count:", torch.cuda.device_count())  # Number of GPUs detected
 if torch.cuda.is_available():
-    print("GPU name:", torch.cuda.get_device_name(0))
-    print("Total GPU memory (bytes):", torch.cuda.get_device_properties(0).total_memory)
+    print("GPU name:", torch.cuda.get_device_name(0))  # Name of first GPU
+    print("Total GPU memory (bytes):", torch.cuda.get_device_properties(0).total_memory)  # Memory size
 ```
 
 Even if your final deployment uses pure ONNX Runtime or TensorRT, PyTorch is often handy for quick “can I see the GPU and how big is it?” checks.
@@ -451,13 +459,13 @@ class TinyCNN(nn.Module):
         self.fc = nn.Linear(16, num_classes)
 
     def forward(self, x):
-        x = self.relu(self.conv(x))
-        x = self.pool(x)
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+        x = self.relu(self.conv(x))  # Convolution + activation
+        x = self.pool(x)             # Global average pooling
+        x = x.view(x.size(0), -1)    # Flatten for linear layer
+        return self.fc(x)            # Output logits
 
 model = TinyCNN().eval()
-dummy = torch.randn(1, 3, 64, 64)
+dummy = torch.randn(1, 3, 64, 64)  # Example input matching model shape
 
 torch.onnx.export(
     model,
@@ -469,6 +477,7 @@ torch.onnx.export(
 )
 print("Exported tiny_cnn.onnx")
 ```
+*# This code defines a small CNN, prepares a dummy input, and exports the model to ONNX format.*
 
 Tasks:
 
@@ -490,12 +499,12 @@ session = ort.InferenceSession(
 )
 inp = session.get_inputs()[0]
 out = session.get_outputs()[0]
-print("Input:", inp.name, inp.shape, inp.type)
-print("Output:", out.name, out.shape, out.type)
+print("Input:", inp.name, inp.shape, inp.type)   # Show input details
+print("Output:", out.name, out.shape, out.type)  # Show output details
 
-dummy = np.random.randn(1, 3, 64, 64).astype(np.float32)
+dummy = np.random.randn(1, 3, 64, 64).astype(np.float32)  # Example input
 
-# Warmup
+# Warmup: run a few inferences to trigger runtime optimizations
 for _ in range(10):
     _ = session.run([out.name], {inp.name: dummy})
 
@@ -503,10 +512,11 @@ for _ in range(10):
 N = 100
 t0 = time.perf_counter()
 for _ in range(N):
-    _ = session.run([out.name], {inp.name: dummy})
+    _ = session.run([out.name], {inp.name: dummy})  # Run inference
 t1 = time.perf_counter()
-print(f"Avg latency: {(t1 - t0) / N * 1000:.3f} ms")
+print(f"Avg latency: {(t1 - t0) / N * 1000:.3f} ms")  # Print average latency in ms
 ```
+*# This script loads an ONNX model, runs warmup inferences, then measures and prints average inference latency.*
 
 Tasks:
 
@@ -528,8 +538,9 @@ If you have access to a machine or board with TensorRT, build and benchmark a Te
      --minShapes=input:1x3x64x64 \
      --optShapes=input:1x3x64x64 \
      --maxShapes=input:1x3x64x64 \
-     --fp16
+     --fp16  # Use FP16 precision for better performance
    ```
+   *# This builds a TensorRT engine optimized for FP16 precision and batch size 1.*
 
 2. Either use `trtexec`’s built-in timing output or load the engine from Python (via the TensorRT Python API) and time batch-1 inference.
 
