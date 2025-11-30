@@ -5,7 +5,14 @@ author:
 language: "en-US"
 rights: "© 2025 Matt Taylor"
 description: >
-  A guide to Python programming focused on AI development.
+  A practical, example-driven guide to using Python and AI
+  across CPUs, GPUs, TPUs, edge devices, and clusters.
+  Focused on reproducible environments, performance,
+  and scalable training and inference. Includes a
+  structured "how to use" guide covering Python versions,
+  library stacks, hardware assumptions, and example layout,
+  plus a conventions guide describing formatting for code,
+  shell prompts, callouts, filenames, and paths.
   
 
 publisher: "Your Imprint or Name"

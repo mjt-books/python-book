@@ -9,10 +9,26 @@ Key points:
 - Primary focus: using AI to utilize multiple hardware resources efficiently and reproducibly
 
 ## How to use this book
+
 Each chapter contains conceptual explanations, code examples, profiling tips, and end-of-chapter exercises. Most examples assume a Linux environment and include commands for common tools.
+
+For detailed information on:
+
+- Python and library versions
+- Hardware assumptions (CPU/GPU/memory)
+- Installation and environment setup
+- Repo layout and reproducibility practices
+- How examples are structured
+
+see the dedicated guide:  
+[How to Use This Book](chapters/how-to-use.md)
+
+For how we format code, shell commands, warnings/notes/tips, and file references, see:  
+[Conventions Used in This Book](chapters/conventions.md)
 
 ## Chapters
 
+0. [Preface](chapters/preface.md)  
 1. [Foundations: AI, Python, and the hardware landscape](chapters/chapter-1.md)  
 2. [Setting up reproducible environments (venv, conda, containers)](chapters/chapter-2.md)  
 3. [Profiling and benchmarking: measuring performance and bottlenecks](chapters/chapter-3.md)  
