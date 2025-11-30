@@ -236,7 +236,7 @@ def step(params, batch):
     # batch: per-device slice of the global batch
     x, y = batch
     logits = model_apply(params, x)          # your model function
-    loss = loss_fn(logits, y)
+    loss = loss_fn(logits, y)               # user-defined loss
     return loss
 
 # Wrap with pmap over a device axis called "devices"
@@ -270,7 +270,7 @@ For many training jobs on a single host TPU slice, `pmap`-style data parallelism
 
 As models and meshes grow, you often want more explicit control than `pmap` provides. That’s where **logical meshes** and `pjit` come in. Instead of “one axis over all devices,” you define a named mesh and describe how each array is sharded across it.
 
-A tiny example (details will vary depending on your JAX version):
+A tiny example (labeled as illustrative pseudocode, because real-world usage depends on your JAX version and sharding APIs):
 
 ```python
 import jax
@@ -287,7 +287,7 @@ mesh = Mesh(jnp.array(devices), axis_names=("data",))
 )
 def step(params, x):
     # x is sharded over the "data" axis
-    y = model_apply(params, x)
+    y = model_apply(params, x)  # your model function; define elsewhere
     return y
 ```
 
@@ -356,14 +356,23 @@ Common ingredients:
 - Vectorized decoding and preprocessing where possible.
 - Prefetching and buffering.
 
-For example, with `tf.data` (often used even when training with JAX):
+For example, with `tf.data` (often used even when training with JAX). This snippet is illustrative: you will need to adapt the feature specification and label extraction to your own dataset schema:
 
 ```python
 import tensorflow as tf
 
 def parse_example(serialized):
-    # ... parse, decode, augment ...
-    return features, labels
+    # Example: parse a record with "image" bytes and integer "label" field.
+    feature_spec = {
+        "image": tf.io.FixedLenFeature([], tf.string),
+        "label": tf.io.FixedLenFeature([], tf.int64),
+    }
+    features = tf.io.parse_single_example(serialized, features=feature_spec)
+    image = tf.io.decode_raw(features["image"], tf.uint8)
+    image = tf.reshape(image, [28, 28, 1])  # adjust to match your data
+    image = tf.cast(image, tf.float32) / 255.0
+    label = tf.cast(features["label"], tf.int32)
+    return {"image": image}, label
 
 dataset = (
     tf.data.TFRecordDataset(tf.io.gfile.glob("gs://bucket/train-*.tfrecord"))
@@ -386,7 +395,7 @@ You can build similar pipelines with pure Python, `multiprocessing`, or librarie
 
 Even with a good host pipeline, you don’t want to block the TPU waiting for host→device transfers. JAX provides **prefetching** patterns that move batches to device memory one (or several) steps ahead.
 
-A simple pattern:
+A simple pattern (illustrative; adjust to your shapes and batch structure):
 
 ```python
 import jax
@@ -396,8 +405,10 @@ def prefetch_to_device(iterator, devices, prefetch_size=2):
     it = iterator
 
     @jax.jit
-    def _prefetch(x):
-        return jax.device_put_sharded(x, devices)
+    def _prefetch(batch):
+        # batch is typically a tuple/dict of arrays shaped
+        # [num_devices, per_device_batch, ...]
+        return jax.device_put_sharded(list(batch), devices)
 
     # Fill an in-memory ring buffer
     buf = []
@@ -446,15 +457,17 @@ import jax.numpy as jnp
 @jax.jit
 def train_step(params, batch):
     def loss_fn(p):
-        logits = model_apply(p, batch["x"])
-        loss = loss_fn_impl(logits, batch["y"])
+        logits = model_apply(p, batch["x"])  # your model function
+        loss = loss_fn_impl(logits, batch["y"])  # your loss function
         return loss, {"loss": loss, "logits": logits}
 
     (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
 
     # Reduce metrics to scalars on-device
-    loss_mean = jax.lax.pmean(loss, axis_name="data") if "data" in aux else loss
-    return params, grads, {"loss": loss_mean}
+    loss_mean = jnp.mean(loss)
+    metrics = {"loss": loss_mean}
+
+    return params, grads, metrics
 ```
 
 Only the small `loss` scalar needs to come back to the host; everything else stays on-device and can be discarded or reused internally.
@@ -505,7 +518,7 @@ import jax.numpy as jnp
 
 @jax.jit
 def step(params, x):
-    return model_apply(params, x)
+    return model_apply(params, x)  # your model function
 
 params = init_params()
 x = jnp.ones((global_batch_size, feature_dim))
@@ -539,12 +552,11 @@ If both numbers are large, the problem is in the compiled step itself or in inpu
 JAX integrates with backend profilers so you can see where time is going on the TPU. In many environments you can use a context manager to capture a trace:
 
 ```python
-from jax.experimental import jax2tf  # just an example import; adjust per JAX version
 import jax
 
 with jax.profiler.trace("profiles/tpu_trace"):
     for _ in range(50):
-        y = step(params, x)
+        y = step(params, x)  # step defined elsewhere in your code
     y.block_until_ready()
 ```
 
@@ -574,7 +586,7 @@ import jax.numpy as jnp
 
 @jax.jit
 def step(params, x):
-    y = model_apply(params, x)
+    y = model_apply(params, x)  # your model function
     jax.debug.print("Batch mean: {m}", m=jnp.mean(y))
     return y
 ```
@@ -717,9 +729,10 @@ num_devices = jax.device_count()
 print("Devices:", jax.devices())
 
 def make_batch(batch_size_per_device, in_dim=784):
-    key = jax.random.PRNGKey(1)
-    x = jax.random.normal(key, (num_devices * batch_size_per_device, in_dim))
-    y = jax.random.randint(key, (num_devices * batch_size_per_device,), 0, 10)
+    key_x = jax.random.PRNGKey(1)
+    key_y = jax.random.PRNGKey(2)
+    x = jax.random.normal(key_x, (num_devices * batch_size_per_device, in_dim))
+    y = jax.random.randint(key_y, (num_devices * batch_size_per_device,), 0, 10)
     return x, y
 
 def loss_fn(params, x, y):
@@ -749,7 +762,7 @@ Tasks:
 - Time `p_forward(params_repl, batch_sharded)` (compile + steady-state) similarly to the single-device version.
 - Increase `batch_size_per_device` and observe:
   - When does throughput (examples/sec) improve?
-  - When does you hit diminishing returns or OOM?
+  - When do you hit diminishing returns or OOM?
 
 ### 3. Experiment with input pipeline and host–device overlap
 
