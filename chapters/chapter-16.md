@@ -144,11 +144,13 @@ Use it selectively: checkpointing every tiny layer can turn backward into an exp
 
 For very large models, parameters and optimizer state alone can exceed a single device’s memory. Common strategies include:
 
-- **Optimizer sharding / ZeRO-style approaches:** split optimizer state and gradients across multiple GPUs so no single device holds everything.
-- **Parameter offloading:** keep some parameters or optimizer state on CPU or NVMe, swapping them into GPU memory only when needed.
-- **Activation offloading:** move rarely used or long-lived activations to host memory between forward and backward.
+- **Optimizer sharding / ZeRO-style approaches:** split optimizer state and gradients across multiple GPUs so no single device holds everything. Here, *sharding* means dividing a large tensor or collection of tensors into disjoint pieces and placing different pieces on different devices or processes, rather than keeping full copies everywhere. “ZeRO” (Zero Redundancy Optimizer) is a family of techniques, popularized by DeepSpeed, that partitions optimizer state, gradients, and sometimes parameters across data-parallel workers instead of fully replicating them.
+- **Parameter offloading:** keep some parameters or optimizer state on CPU or NVMe instead of GPU, swapping them into GPU memory only when needed. More generally, *offloading* means intentionally storing tensors on a slower but larger memory tier (like host RAM or disk) and moving them to faster memory (like GPU RAM) just-in-time for computation.
+- **Activation offloading:** move rarely used or long-lived activations to host memory between forward and backward; you trade extra data transfers and some slowdown for a lower GPU memory peak.
 
-These techniques usually come from libraries (e.g., DeepSpeed, Fully Sharded Data Parallel in PyTorch, distributed optimizers in TensorFlow/JAX). The practical guidance:
+These techniques usually come from libraries (e.g., DeepSpeed, Fully Sharded Data Parallel in PyTorch, distributed optimizers in TensorFlow/JAX). **Fully Sharded Data Parallel (FSDP)** is a PyTorch strategy that shards model parameters, gradients, and optimizer state across GPUs so each rank only holds a slice of the full model at any given time.
+
+The practical guidance:
 
 - Start with built-in sharded or fully sharded data-parallel solutions before building your own.
 - Monitor PCIe or network utilization: heavy offloading can simply move your bottleneck from memory to bandwidth.
@@ -158,7 +160,7 @@ These techniques usually come from libraries (e.g., DeepSpeed, Fully Sharded Dat
 Sometimes the cheapest way to “optimize memory” is to pick a slightly smaller or more memory-friendly architecture:
 
 - Use narrower layers or fewer heads when early experiments don’t need full scale.
-- Prefer architectures with known memory-friendly implementations (e.g., FlashAttention-based transformers vs naive attention).
+- Prefer architectures with known memory-friendly implementations (e.g., FlashAttention-based transformers vs naive attention). **FlashAttention** is an optimized attention kernel that computes exact softmax attention using IO-aware tiling, reducing activation memory and improving speed for long sequences.
 - Prune unused branches or debugging hooks from your training graph.
 
 This is especially relevant in early research phases: you want to de-risk ideas with a “budget” version of the model, then scale up once the approach is promising and the memory plan is clear.
@@ -306,7 +308,7 @@ In distributed setups, you have additional considerations:
 Framework-specific tools can help:
 
 - **PyTorch:** use `torch.distributed.launch` for launching distributed jobs, and handle retries at the application level.
-- **TensorFlow:** use `tf.distribute.Strategy` for distribution, and rely on the underlying orchestration system for fault tolerance.
+- **TensorFlow:** use `tf.distribute.Strategy` for distribution, and rely on the underlying orchestration system for fault tolerance. `tf.distribute.Strategy` is a high-level TensorFlow API that manages how models and variables are replicated across devices and workers so you can write mostly single-process-style code.
 - **Kubernetes:** use Jobs or CronJobs for batch processing, with built-in restart and backoff policies.
 
 ---
