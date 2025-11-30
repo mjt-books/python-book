@@ -39,6 +39,23 @@ When things go wrong in multi-device code, they usually don’t fail politely wi
 
 The core idea: **narrow the problem by axis**—performance vs correctness, single-device vs multi-device, reproducible vs flaky—then attack each axis with the simplest tools that can falsify a hypothesis.
 
+### Quick symptom → causes → next moves playbook
+
+Use this table as a starting point when a job “just feels wrong.” Pick the closest symptom and follow the checks; adjust based on what you see in your own logs and profilers.
+
+| Symptom                                      | Likely causes (first guesses)                                                                 | Next moves                                                                                      |
+|----------------------------------------------|------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| GPU utilization low, CPU busy                | Slow input pipeline, too much Python overhead, tiny batches                                   | Swap in synthetic tensors; profile dataloader; increase batch size until memory is nearly full |
+| Multi-GPU slower than single GPU             | Communication overhead, imbalanced shards, incorrect DDP/sharding setup                       | Compare 1× vs N× throughput; verify per-rank data shards; inspect/allreduce timings            |
+| Throughput drops over time                   | Memory leaks/fragmentation, unbounded caches, accumulating logs or state                      | Plot GPU/host memory over steps; cap/clear caches; reduce log volume                           |
+| Loss or metrics suddenly diverge             | LR too high, bad initialization, mixed-precision issues, data/label corruption                | Run overfit-a-batch; lower LR; disable AMP; log a few preprocessed examples + labels           |
+| Loss flat / model won’t learn                | Wrong targets, frozen layers, bad optimizer config, data not reaching model as expected       | Overfit-a-batch; inspect gradients; verify parameter groups; dump sample batches               |
+| Hangs or deadlocks in distributed training   | Mismatched collectives, rank desync, one worker crashing/OOM while others wait                | Add per-rank heartbeats; reduce world size; enable timeouts; check which rank stopped first    |
+| Frequent OOMs or device resets               | Batch too large, memory fragmentation, large activations or buffers kept too long             | Lower batch size; enable gradient checkpointing; clear unused references and call `empty_cache` |
+| Regressions only at larger scale or on cluster | Environment drift, different drivers/libraries, network or filesystem bottlenecks at scale | Run minimal repro on cluster; log full environment; measure network and storage throughput     |
+
+You don’t need to memorize this; treat it as a checklist you adapt and extend in your own notes.
+
 ### Step 1: classify the bug
 
 Start by deciding what kind of failure you’re seeing:
@@ -175,6 +192,8 @@ A simple mental model:
 - **Logs** tell you *discrete events and context* (what happened, with parameters).
 - **Metrics** tell you *how things evolve over time* (throughput, loss, latency, utilization).
 - **Traces** show *how a single request or step flows through the system* (which components were slow).
+
+In earlier chapters—especially [chapter 3 on profiling and benchmarking](chapters/chapter-3.md) and [chapter 19 on tools, utilities, and CI](chapters/chapter-19.md)—you saw how to measure performance on a single machine and wire up basic monitoring for training pipelines. The observability patterns in this appendix are meant to sit on top of that: combine your existing CPU/GPU profilers and CI checks with structured logs, a small set of metrics, and traces so that you can both **detect** problems automatically and **inspect** them after the fact without rerunning expensive jobs.
 
 You don’t need a full observability stack on day one. But you should have a *minimal* setup for every serious experiment or deployment: structured logs, a few key metrics, and a way to inspect slow steps.
 
