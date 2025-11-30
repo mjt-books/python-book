@@ -25,51 +25,69 @@ To keep this chapter practical, we’ll follow the lifecycle of a typical traini
 
 At a high level, we’ll cover:
 
-1. **Why observability and CI matter for training pipelines**  
-   - Ground the chapter with concrete failure stories: silent metric regressions, flaky training runs, mysterious slowdowns.  
-   - Define “observability” in the ML context: logs, metrics, traces, artifacts, and configuration.  
-   - Connect these ideas to CI: fast feedback on changes before they hit expensive runs or production systems.  
-   - Provide a simple mental model: every run should answer “what happened?”, “how well did it work?”, and “how does it compare to before?”.
+### 1. Why observability and CI matter for training pipelines
 
-2. **Logging fundamentals for ML code (structured logs, contexts, and log levels)**  
-   - Start with Python’s built-in logging and show how to avoid `print()`-only codebases.  
-   - Introduce structured logging (key–value pairs) so logs are machine-readable and filterable across many processes.  
-   - Use contextual information (run IDs, ranks, experiment names, hardware info) to make multi-GPU and multi-node logs navigable.  
-   - Define log levels and patterns: what belongs at `DEBUG` vs `INFO` vs `WARNING`/`ERROR` in a training pipeline.  
-   - Show minimal examples that work both locally and in distributed jobs.
+- Ground the chapter with concrete failure stories: silent metric regressions, flaky training runs, mysterious slowdowns.  
+- Define “observability” in the ML context: logs, metrics, traces, artifacts, and configuration.  
+- Connect these ideas to CI: fast feedback on changes before they hit expensive runs or production systems.  
+- Provide a simple mental model: every run should answer “what happened?”, “how well did it work?”, and “how does it compare to before?”.
 
-3. **Metrics and experiment tracking (dashboards, comparisons, and artifacts)**  
-   - Clarify the difference between logs and metrics, and why you need both.  
-   - Introduce simple metric sinks: TensorBoard, CSV/JSON logs, Prometheus-style metrics.  
-   - Layer in experiment tracking tools (MLflow, Weights & Biases, custom dashboards) to compare runs, hyperparameters, and hardware configs.  
-   - Discuss storing and versioning artifacts: model checkpoints, config files, profiling traces, and sample outputs.  
-   - Emphasize stable naming and schemas so metrics remain queryable over months of experiments.
+### 2. Logging fundamentals for ML code (structured logs, contexts, and log levels)
 
-4. **Tracing and profiling hooks in training workflows**  
-   - Connect chapter 3’s profiling ideas to day-to-day observability: when to capture traces vs when to just log aggregated metrics.  
-   - Show how to integrate lightweight profilers (framework profilers, NVTX ranges, PyTorch/TensorFlow/JAX hooks) into training loops without overwhelming your logs.  
-   - Demonstrate targeted profiling: enabling detailed traces only for specific steps, epochs, or CI jobs to catch regressions.  
-   - Explain how traces, logs, and metrics complement each other when diagnosing performance issues on GPUs, TPUs, or CPUs.
+- Start with Python’s built-in logging and show how to avoid `print()`-only codebases.  
+- Introduce structured logging (key–value pairs) so logs are machine-readable and filterable across many processes.  
+- Use contextual information (run IDs, ranks, experiment names, hardware info) to make multi-GPU and multi-node logs navigable.  
+- Define log levels and patterns: what belongs at `DEBUG` vs `INFO` vs `WARNING`/`ERROR` in a training pipeline.  
+- Show minimal examples that work both locally and in distributed jobs.
 
-5. **Integrating tools into local workflows and notebooks**  
-   - Start from a realistic baseline: exploratory work in notebooks or small scripts on a laptop or single GPU.  
-   - Show low-friction ways to enable logging, metrics, and basic tracking without breaking notebook ergonomics.  
-   - Recommend patterns for gradually moving from notebook experiments to “script + config + tracking” while preserving reproducibility.  
-   - Discuss how to keep local and remote environments aligned: same logging formats, metric names, and minimal configuration differences.
+### 3. Metrics and experiment tracking (dashboards, comparisons, and artifacts)
 
-6. **Adding training-aware checks to CI (smoke tests, regressions, and budgets)**  
-   - Define a minimal CI pipeline for ML code: unit tests, style checks, import tests, and fast “smoke” training runs.  
-   - Show how to implement tiny end-to-end training checks (do a few steps, verify loss decreases and metrics/logging paths work).  
-   - Introduce performance and cost guardrails in CI: catching large slowdowns, GPU overuse, or accidental changes to batch size/sequence length.  
-   - Outline patterns for GPU- and accelerator-aware CI: conditional tests, nightly jobs, and staged pipelines (CPU-only checks first, heavy tests later).
+- Clarify the difference between logs and metrics, and why you need both.  
+- Introduce simple metric sinks: TensorBoard, CSV/JSON logs, Prometheus-style metrics.  
+- Layer in experiment tracking tools (MLflow, Weights & Biases, custom dashboards) to compare runs, hyperparameters, and hardware configs.  
+- Discuss storing and versioning artifacts: model checkpoints, config files, profiling traces, and sample outputs.  
+- Emphasize stable naming and schemas so metrics remain queryable over months of experiments.
 
-7. **Exercises: instrumenting a simple training script and adding CI-style checks**  
-   - Provide step-by-step tasks: start from a plain training script, add structured logging, metric emission, and a small set of tracked artifacts.  
-   - Extend the script with a “CI mode” that runs only a handful of steps and asserts basic health checks (loss direction, metric shapes, presence of logs).  
-   - Encourage readers to wire these pieces into their existing CI system (GitHub Actions, GitLab CI, local runners, or custom schedulers).  
-   - Suggest follow-up experiments: adding profiling snapshots to CI, comparing runs across hardware, and evolving a personal or team observability template.
+### 4. Tracing and profiling hooks in training workflows
+
+- Connect chapter 3’s profiling ideas to day-to-day observability: when to capture traces vs when to just log aggregated metrics.  
+- Show how to integrate lightweight profilers (framework profilers, NVTX ranges, PyTorch/TensorFlow/JAX hooks) into training loops without overwhelming your logs.  
+- Demonstrate targeted profiling: enabling detailed traces only for specific steps, epochs, or CI jobs to catch regressions.  
+- Explain how traces, logs, and metrics complement each other when diagnosing performance issues on GPUs, TPUs, or CPUs.
+
+### 5. Integrating tools into local workflows and notebooks
+
+- Start from a realistic baseline: exploratory work in notebooks or small scripts on a laptop or single GPU.  
+- Show low-friction ways to enable logging, metrics, and basic tracking without breaking notebook ergonomics.  
+- Recommend patterns for gradually moving from notebook experiments to “script + config + tracking” while preserving reproducibility.  
+- Discuss how to keep local and remote environments aligned: same logging formats, metric names, and minimal configuration differences.
+
+### 6. Adding training-aware checks to CI (smoke tests, regressions, and budgets)
+
+- Define a minimal CI pipeline for ML code: unit tests, style checks, import tests, and fast “smoke” training runs.  
+- Show how to implement tiny end-to-end training checks (do a few steps, verify loss decreases and metrics/logging paths work).  
+- Introduce performance and cost guardrails in CI: catching large slowdowns, GPU overuse, or accidental changes to batch size/sequence length.  
+- Outline patterns for GPU- and accelerator-aware CI: conditional tests, nightly jobs, and staged pipelines (CPU-only checks first, heavy tests later).
+
+### 7. Exercises: instrumenting a simple training script and adding CI-style checks
+
+- Provide step-by-step tasks: start from a plain training script, add structured logging, metric emission, and a small set of tracked artifacts.  
+- Extend the script with a “CI mode” that runs only a handful of steps and asserts basic health checks (loss direction, metric shapes, presence of logs).  
+- Encourage readers to wire these pieces into their existing CI system (GitHub Actions, GitLab CI, local runners, or custom schedulers).  
+- Suggest follow-up experiments: adding profiling snapshots to CI, comparing runs across hardware, and evolving a personal or team observability template.
 
 The rest of this chapter assumes you’re comfortable with the basic profiling and hardware concepts from earlier chapters. We’ll focus on turning those one-off checks into durable, observable training pipelines that are easy to debug and safe to change.
+
+## Key concepts used throughout this chapter
+
+To avoid backtracking later, here are a few terms we’ll reuse across sections:
+
+- **Run ID** — a unique identifier for a single training run (for example, a timestamp plus a short name). You use the same run ID to tie together logs, metrics files, checkpoints, traces, and experiment-tracking entries.
+- **Rank** — the integer ID of a process in distributed training (often `0` to `world_size - 1`). Rank 0 is conventionally the “leader” process that prints user-facing logs and writes shared metrics.
+- **Smoke test** — a tiny, fast end-to-end training run used in CI to check that the pipeline still basically works (loss moves in the right direction, metrics and artifacts are produced) without doing full training.
+- **CI mode** — a special configuration or flag for your training script that shrinks the workload (few steps, small dataset, small model) so it is cheap enough to run as part of CI on every change.
+
+You’ll see these terms referenced in logging, metrics, tracing, notebook, and CI examples; the underlying ideas stay the same even as the tooling changes.
 
 ## Why observability and CI matter for training pipelines
 
@@ -103,6 +121,11 @@ The *cost* of adding observability and CI is extra code, more moving parts, and 
 - Compare runs across machines and hardware configurations because metrics and logs share the same schema.  
 - Integrate basic “does this still work?” checks into your review process, so regressions are caught before they consume days of GPU time.
 
+If you’re just starting out, you can think of the practices in this chapter in two tiers:
+
+- **Minimum viable baseline:** structured logs, a per-run ID, simple file-based metrics, and at least one tiny training smoke test in CI. These work on a single laptop or CPU-only CI job and should be your first priority.  
+- **Optional enhancements:** hosted experiment trackers, rich dashboards, GPU-aware CI jobs, and scheduled profiling runs. These become valuable as your team, hardware, and experiment volume grow.
+
 In the rest of this chapter, we’ll turn these ideas into concrete patterns:
 
 - First, we’ll standardize how your training code logs what it’s doing.  
@@ -127,11 +150,13 @@ We’ll focus on four ideas:
 3. Attach **context** (run IDs, ranks, hardware) to every log line.  
 4. Be intentional about **log levels** so you can dial verbosity up or down.
 
+A recurring theme: the patterns in this section are **minimum viable** and are deliberately chosen to work both on a single laptop and in multi-GPU or multi-node jobs.
+
 ### 1. Replace `print()` with a real logger
 
 Python’s standard library `logging` module is enough for many projects and plays well with third-party tools.
 
-A minimal pattern for a training script:
+A minimal pattern for a training script (works on local machines *and* in cluster jobs that just capture stdout):
 
 ```python
 import logging
@@ -202,7 +227,7 @@ logger.info(
 )
 ```
 
-The important part is the *discipline*: use the same event names and keys across runs so you can compare them later.
+The important part is the *discipline*: use the same event names and keys across runs so you can compare them later. This pattern is **cluster-friendly** because it stays text-based and works with most log aggregation systems.
 
 ### 3. Add context: run IDs, ranks, and hardware info
 
@@ -362,6 +387,8 @@ In this section we’ll:
 3. Introduce experiment tracking tools (from “just TensorBoard” up to MLflow/W&B-style services).  
 4. Talk about artifacts: where model checkpoints and related files live and how they link back to runs.
 
+Where relevant, we’ll explicitly distinguish **minimum viable** patterns that work in CPU-only, laptop-scale environments from **optional enhancements** that shine on shared clusters or multi-user setups.
+
 ### 1. Decide what to measure
 
 Before choosing tools, decide which signals you care about. For most training pipelines, the core buckets are:
@@ -391,7 +418,11 @@ Everything should be tied to a **run ID**, the same one you used in logging. Tha
 
 ### 2. File-based metrics: CSV/JSON that work everywhere
 
-The lowest-friction way to get metrics out of your code is to write them to a simple file format (CSV or JSON lines). This works on laptops, clusters, CI, and inside containers without extra infrastructure.
+The lowest-friction way to get metrics out of your code is to write them to a simple file format (CSV or JSON lines). This is a **minimum viable** pattern that:
+
+- Works on laptops, CPU-only servers, and constrained CI runners.  
+- Doesn’t require any external services or network connectivity.  
+- Still scales reasonably well to cluster jobs as long as you have access to the filesystem where runs write.
 
 A small CSV logger might look like:
 
@@ -473,12 +504,13 @@ File-based metrics are enough for an individual developer, but as soon as you ha
 
 you’ll want a dashboard or tracking service. Two common categories:
 
-#### a. Local-first: TensorBoard and friends
+#### a. Local-first: TensorBoard and friends (optional, local- and cluster-friendly)
 
 TensorBoard is often the first step up from CSVs:
 
 - You log metrics as scalar summaries.  
-- It provides web-based plots, run comparisons, and some profiling integration.
+- It provides web-based plots, run comparisons, and some profiling integration.  
+- It works on a single machine and can also be pointed at a shared log directory on a cluster.
 
 A minimal PyTorch-like usage pattern:
 
@@ -502,21 +534,23 @@ writer.close()
 
 Advantages:
 
-- Easy to set up, works offline.  
-- Runs can be synced or copied to a central place for the team to browse.  
+- Easy to set up, works offline on laptops.  
+- Runs can be synced or copied to a central place (e.g., an NFS share) for the team to browse on a cluster.
 
 Limitations:
 
 - Comparisons across many projects and hardware configs can get messy unless you standardize directory structures.  
 - Auth, sharing, and long-term storage are largely DIY.
 
-#### b. Hosted or self-hosted experiment trackers
+#### b. Hosted or self-hosted experiment trackers (optional, multi-user / cluster-oriented)
 
 Tools like **MLflow**, **Weights & Biases**, **Comet**, and similar systems add:
 
 - A central run registry (with run IDs, configs, metrics, artifacts).  
 - Web dashboards for comparing runs by any metadata field.  
 - APIs for linking runs to code, issues, and deployments.
+
+These are **nice-to-have** enhancements once you move beyond a single developer or a single machine. They add the most value in team and cluster environments where many people launch experiments concurrently.
 
 A generic pattern (conceptual, not tied to one vendor):
 
@@ -582,7 +616,7 @@ Metrics are not the whole story. To make experiments reproducible and debuggable
 
 Good patterns:
 
-- Use a **directory per run**, named with `run_id`, and put all run-specific artifacts under it:
+- Use a **directory per run**, named with `run_id`, and put all run-specific artifacts under it. This is a **minimum viable** organizational scheme that works equally well on a laptop filesystem and a shared cluster volume:
 
   ```text
   runs/
@@ -599,7 +633,7 @@ Good patterns:
   ```
 
 - Store this directory on a location that’s:
-  - Reachable from where you run training.  
+  - Reachable from where you run training (local disk or network filesystem).  
   - Backed up or otherwise durable enough for your needs (e.g., object storage in the cloud, a network share on-prem).
 
 - If you use an experiment tracker, register these paths as **artifacts** so the UI links directly to them.
@@ -643,11 +677,16 @@ This helps you:
 
 ### 5. Putting it together
 
-By the end of this section, your training loop should:
+By the end of this section, your **minimum viable baseline** should be:
 
-- Emit structured logs for human-readable troubleshooting.  
-- Log a small set of well-named metrics to a file or tracking backend.  
-- Save key artifacts under a per-run directory, tied together by a run ID.
+- Structured logs for human-readable troubleshooting.  
+- A small set of well-named metrics logged to CSV/JSON.  
+- Key artifacts saved under a per-run directory, tied together by a run ID.
+
+On top of that, you can optionally layer:
+
+- Local dashboards (TensorBoard) for richer visualization.  
+- Hosted trackers for team-wide run comparison and governance.
 
 In the next section, we’ll layer **tracing and profiling hooks** on top of this foundation, so you can capture detailed performance information for selected runs without overwhelming your everyday metrics and logs.
 
@@ -669,6 +708,8 @@ In this section we’ll:
 4. Store and link traces alongside other run artifacts.  
 5. Sketch how to use “profiling modes” in CI or scheduled jobs.
 
+Because profilers can be heavyweight, think of them as an **optional enhancement** you enable on-demand—typically on a powerful workstation or cluster node—while keeping the surrounding hooks lightweight enough to leave in place everywhere.
+
 ### 1. When to profile, not just measure
 
 You don’t want full traces for every step of every run; that would be too heavy and noisy. Profiling is most useful when:
@@ -683,7 +724,7 @@ A good rule of thumb:
 - Use **metrics** for continuous monitoring and comparisons across runs.  
 - Use **profilers/traces** as focused “microscopes” on short windows of time.
 
-That’s why we integrate profiling as a *mode* of the training script: same code, but with a flag or environment variable that turns on detailed tracing for a few dozen steps.
+That’s why we integrate profiling as a *mode* of the training script: same code, but with a flag or environment variable that turns on detailed tracing for a few dozen steps. You can flip this on both locally and on cluster jobs that have the right tooling installed.
 
 ### 2. A minimal profiling wrapper around the training loop
 
@@ -742,7 +783,7 @@ Key ideas:
 - We use a **schedule**: a few unprofiled steps, a warmup period, then a short active window.  
 - Traces are written under `run_ctx.run_dir / "traces"`, so they tie into the artifact structure from the previous section.
 
-Other frameworks offer similar constructs (e.g., TensorFlow’s `tf.profiler`, JAX’s profiling tools); the pattern—short windows, explicit mode, per-run trace directories—stays the same.
+Other frameworks offer similar constructs (e.g., TensorFlow’s `tf.profiler`, JAX’s profiling tools); the pattern—short windows, explicit mode, per-run trace directories—stays the same. This pattern is usable both on a laptop (CPU-only profiling) and on GPU-equipped cluster nodes.
 
 ### 3. Add semantic markers to traces (NVTX and scopes)
 
@@ -847,8 +888,8 @@ A common pattern:
 
 - In your CI config:
 
-  - For fast PR jobs: run in `normal` mode with tiny datasets and a handful of steps.  
-  - For scheduled jobs: run in `profile_short` mode on a realistic batch/sequence configuration, save traces as artifacts.
+  - For fast PR jobs: run in `normal` mode with tiny datasets and a handful of steps (CPU-only friendly on most runners).  
+  - For scheduled jobs on GPU-capable runners: run in `profile_short` mode on a realistic batch/sequence configuration, save traces as artifacts.
 
 Even a single profiling job per day or week can catch:
 
@@ -1107,8 +1148,7 @@ In the next section, we’ll connect these building blocks to CI: small, trainin
 
 Traditional CI for Python projects focuses on unit tests, style checks, and maybe a few integration tests. That’s necessary but not sufficient for ML training code. You can pass every unit test and still:
 
-- Break training dynamics (loss no longer decreases).  
-- Slow training by 2× through a small change in data loading or model code.  
+- Break training by making gradients explode, slowing data loading, or disabling mixed precision.  
 - Silently stop writing logs, metrics, or checkpoints.
 
 This section shows how to add **training-aware checks** to CI without turning every pull request into a full-scale training run. The goal is to run **small, fast, representative slices** of your pipeline that validate:
@@ -1125,7 +1165,9 @@ We’ll cover:
 4. Making CI hardware-aware (CPU-only vs GPU jobs).  
 5. Organizing CI configs so they stay maintainable.
 
-### 1. Minimal training smoke tests
+We’ll explicitly flag which pieces form the **minimum viable CI baseline** and which are **nice-to-have additions** when you have more hardware and time budget.
+
+### 1. Minimal training smoke tests (minimum viable)
 
 A **smoke test** is a tiny training run that answers “does this still basically work?” as cheaply as possible. It should:
 
@@ -1171,7 +1213,7 @@ The key is that this uses the **same code path** as normal training:
 
 If even this is too heavy for your CI budget, you can move the smoke test into a dedicated test file (e.g., `test_smoke_training.py`) that constructs an even smaller model and dataset but still exercises the end-to-end plumbing.
 
-### 2. Asserting on health signals
+### 2. Asserting on health signals (minimum viable)
 
 A smoke test that merely “does not crash” is helpful but weak. You want it to assert on **simple, robust conditions** that indicate whether training is healthy.
 
@@ -1223,7 +1265,7 @@ You don’t need perfect statistical guarantees; you just want to catch gross fa
 
 These checks give reviewers confidence that “training still roughly behaves like training” on every change.
 
-### 3. Guardrails for performance and cost
+### 3. Guardrails for performance and cost (optional enhancement)
 
 You rarely want to enforce strict performance thresholds in CI (results can be noisy), but simple **guardrails** can catch egregious regressions:
 
@@ -1232,11 +1274,11 @@ You rarely want to enforce strict performance thresholds in CI (results can be n
 
 Two practical approaches:
 
-1. **Wall-clock timeout in CI**  
+1. **Wall-clock timeout in CI** (baseline)  
    - Rely on your CI system’s job timeout to prevent runaway tests.  
    - Within tests, you can also assert that a small run completes under a loose bound (e.g., `< 120s` on a known runner).
 
-2. **Relative performance checks in scheduled jobs**  
+2. **Relative performance checks in scheduled jobs** (nice-to-have)  
    - For nightly or weekly runs on more stable runners, you can:
      - Log steps/sec to your metrics system.  
      - Compare to a rolling baseline and alert if throughput drops by, say, >30%.  
@@ -1273,7 +1315,7 @@ Not all CI environments have GPUs (or TPUs). You want your tests to be:
 A few patterns help:
 
 - **Device selection in config**, not hard-coded `cuda:0`.  
-  - Your training code should accept a `device` or `use_cuda` flag and default to CPU.  
+  - Your training code should accept a `device` or `use_cuda` flag and default to CPU, so the same CI smoke test runs on cheap CPU runners and, optionally, on GPU runners.
 
 - **Conditional tests based on hardware availability.**  
   - In pytest, you can skip GPU-specific tests if `torch.cuda.is_available()` is false.
@@ -1294,7 +1336,7 @@ A few patterns help:
 
 - **Separate CI jobs for CPU and GPU.**  
   - A common layout:
-    - `ci-cpu`: unit tests, style checks, CPU-only smoke tests.  
+    - `ci-cpu` (minimum viable): unit tests, style checks, CPU-only smoke tests.  
     - `ci-gpu` (optional): a small GPU-enabled smoke test on a dedicated runner.  
   - If GPU capacity is scarce, you can run `ci-gpu` only on:
     - Main branch.  
@@ -1330,23 +1372,17 @@ Over time, you can evolve your CI from:
 - “Run pytest + a small training smoke test” →  
 - “Run smoke tests, a GPU check, and occasional profiling or regression jobs on a schedule.”
 
-By the end of this section, your project should have:
-
-- At least one training-aware smoke test that runs in CI.  
-- Simple assertions that catch obvious training and observability breakages.  
-- A path to layer in performance and cost guardrails without overwhelming your CI budget.
-
-In the final section, we’ll turn everything from this chapter into concrete exercises: you’ll instrument a small training script with logging, metrics, and tracing, then wire a CI-style smoke test around it.
-
 ## Exercises: instrumenting a simple training script and adding CI-style checks
 
 These exercises are meant to be small, end-to-end moments: start from a plain training script and gradually add the observability and CI patterns from this chapter. You don’t need a big model or a cluster—most tasks are designed to run on a single CPU or a single modest GPU.
 
 Pick one or two exercises that match your environment and time budget. If you already have a training codebase, feel free to apply the steps there instead of using a toy script.
 
+Where helpful, each exercise hints at a **minimum viable** outcome and some **optional extensions** for richer setups (e.g., GPU runners, hosted trackers).
+
 ### 1. Add structured logging to a toy training loop
 
-**Goal:** Replace `print()` calls with a minimal, reusable logging setup.
+**Goal (minimum viable):** Replace `print()` calls with a minimal, reusable logging setup that works on your laptop and in simple CI.
 
 1. Start from a simple training script (or framework tutorial) that:
    - Trains a small model on a toy dataset (e.g., MNIST, CIFAR-10, or random data).  
@@ -1364,11 +1400,13 @@ Pick one or two exercises that match your environment and time budget. If you al
    - Can you grep for `train_step end` and see all steps?  
    - Does each line include the `run_id`?
 
-Optional: Add a `--log-level` flag so you can switch between `INFO` and `DEBUG` without changing code.
+**Optional enhancements:**  
+- Add a `--log-level` flag so you can switch between `INFO` and `DEBUG` without changing code.  
+- Write logs to per-run files under `runs/<run_id>/logs/` for easier inspection on shared cluster machines.
 
 ### 2. Log metrics to a file and plot them
 
-**Goal:** Emit metrics to a simple file and visualize them after training.
+**Goal (minimum viable):** Emit metrics to a simple file and visualize them after training, using only local tools.
 
 1. Add a `CSVMetricLogger` (or JSON-lines logger) to your script:
    - One row per logging event.  
@@ -1386,11 +1424,13 @@ Optional: Add a `--log-level` flag so you can switch between `INFO` and `DEBUG` 
    - Does the loss curve match what you saw in the logs?  
    - Is there any obvious bug (e.g., flat or increasing loss) that you would have missed without the plot?
 
-Optional: Add a `run_id` column and run the script twice with different configs, then plot both runs on the same chart.
+**Optional enhancements:**  
+- Add a `run_id` column and run the script twice with different configs, then plot both runs on the same chart.  
+- Push the metrics into TensorBoard or a hosted tracker to compare runs across different machines (local vs cluster).
 
 ### 3. Capture a short profiler trace for your training step
 
-**Goal:** Integrate a profiling mode that writes a trace artifact for a short window of steps.
+**Goal (optional enhancement):** Integrate a profiling mode that writes a trace artifact for a short window of steps.
 
 1. Add a flag or environment variable (e.g., `--mode profile` or `PROFILE_TRAINING=1`) to your training script.
 
@@ -1409,11 +1449,13 @@ Optional: Add a `run_id` column and run the script twice with different configs,
    - The relative time spent in data loading vs forward/backward.  
    - Whether GPU utilization looks reasonable during the profiled window.
 
-Optional: Add NVTX or equivalent scopes around `data_loading`, `forward`, `backward`, and `optimizer_step` and verify that they show up in the trace.
+**Optional extensions:**  
+- Add NVTX or equivalent scopes around `data_loading`, `forward`, `backward`, and `optimizer_step` and verify that they show up in the trace.  
+- Run the same profiling mode on a laptop CPU and on a cluster GPU node to compare shapes of the timelines.
 
 ### 4. Introduce a “CI mode” and a smoke test
 
-**Goal:** Add a fast-running CI mode to your script and a smoke test that asserts basic training health.
+**Goal (minimum viable):** Add a fast-running CI mode to your script and a smoke test that asserts basic training health on CPU.
 
 1. Extend your training script with a `--mode` flag:
    - `normal` (default): your usual configuration.  
@@ -1436,11 +1478,13 @@ Optional: Add NVTX or equivalent scopes around `data_loading`, `forward`, `backw
 
 4. Run the test locally (e.g., with pytest) and verify it passes quickly.
 
-Optional: Add a `--max-duration-seconds` parameter and assert that the CI mode run finishes within a loose time bound on your machine.
+**Optional enhancements:**  
+- Add a `--max-duration-seconds` parameter and assert that the CI mode run finishes within a loose time bound on your machine.  
+- Add a second smoke test that runs on GPU (if available) and is skipped automatically on CPU-only environments.
 
 ### 5. Wire your smoke test into your CI configuration
 
-**Goal:** Make the smoke test run automatically on each change.
+**Goal (minimum viable):** Make the smoke test run automatically on each change in a CPU-only CI job.
 
 This exercise is more about CI glue than Python, but it closes the loop.
 
@@ -1454,8 +1498,8 @@ This exercise is more about CI glue than Python, but it closes the loop.
    - Ensure your training script can fall back to CPU automatically when no GPU is present.  
    - Keep the CI configuration for the smoke test tiny enough to pass on CPU in reasonable time.
 
-3. If you have access to GPU runners:
-   - Optionally add a separate job (tagged/labelled appropriately) that runs:
+3. If you have access to GPU runners (optional enhancement):
+   - Add a separate job (tagged/labelled appropriately) that runs:
      - The same smoke test, but with `device="cuda"` or equivalent.  
      - Or a slightly larger CI mode that more closely matches real training.
 
@@ -1463,14 +1507,6 @@ This exercise is more about CI glue than Python, but it closes the loop.
    - Make a small, deliberate break (e.g., comment out a log call or change the loss computation) and push a branch.  
    - Confirm that the CI run fails in a way that points you at the right problem (e.g., loss not decreasing, missing metrics file).
 
-Optional: Add a nightly or weekly job that runs your training script in `profile_short` mode and saves traces as build artifacts, giving you a regular performance snapshot.
-
----
-
-These exercises deliberately reuse the same concepts—`run_id`, structured logs, metrics files, per-run directories, and CI modes—so that by the time you finish, you’ll have:
-
-- A training script that leaves behind a rich, structured record of each run.  
-- At least one profiler trace per configuration you care about.  
-- Automated checks that catch obvious training and observability regressions before they reach production hardware.
-
-In practice, you can apply the same patterns to much larger codebases: start with a single script or pipeline, instrument it end-to-end, and then gradually extend those conventions across your projects and your team.
+**Optional extensions:**  
+- Add a nightly or weekly job that runs your training script in `profile_short` mode on a GPU runner and saves traces as build artifacts, giving you a regular performance snapshot.  
+- Publish CI metrics (like smoke-test duration or steps/sec) to your experiment tracker to watch for long-term regressions.
